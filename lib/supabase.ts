@@ -5,14 +5,27 @@ import type { Profile } from '@/types';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
-}
+const missingSupabaseEnvMessage = 'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY';
 
 let browserClient: SupabaseClient | null = null;
 
+const createMissingSupabaseClient = () =>
+  new Proxy(
+    {},
+    {
+      get() {
+        throw new Error(missingSupabaseEnvMessage);
+      },
+    },
+  ) as SupabaseClient;
+
 const getSupabaseBrowserClient = () => {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    if (typeof window !== 'undefined') {
+      throw new Error(missingSupabaseEnvMessage);
+    }
+    return createMissingSupabaseClient();
+  }
   if (!browserClient) {
     browserClient = createBrowserClient(supabaseUrl, supabaseAnonKey);
   }

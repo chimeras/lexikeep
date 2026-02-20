@@ -55,6 +55,20 @@ export const signUp = async (email: string, password: string, username: string) 
   return { data, error };
 };
 
+export const signInWithGoogle = async (redirectTo: string) => {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo,
+      queryParams: {
+        access_type: 'offline',
+        prompt: 'consent',
+      },
+    },
+  });
+  return { data, error };
+};
+
 export const upsertProfile = async (userId: string, username: string, role: AppRole = 'student') => {
   const { data, error } = await supabase
     .from('profiles')

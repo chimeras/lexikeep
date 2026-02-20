@@ -19,7 +19,7 @@ const emptyMetrics: StudentMetrics = {
 
 const avatarOptions = Array.from({ length: 8 }, (_, index) => ({
   id: index + 1,
-  preferred: `/assets/avatars/${index + 1}.webp`,
+  preferred: `/assets/avatars/${index + 1}.jpg`,
   fallback: `/assets/avatars/${index + 1}.jpg`,
 }));
 

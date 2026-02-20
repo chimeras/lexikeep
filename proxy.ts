@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { getDashboardRoute } from '@/lib/auth';
 
-const PUBLIC_PATHS = ['/', '/login', '/register'];
+const PUBLIC_PATHS = ['/', '/login', '/register', '/auth/callback'];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({

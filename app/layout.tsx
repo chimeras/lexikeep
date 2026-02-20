@@ -11,8 +11,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} bg-gray-50`}>
+    <html lang="en" data-scroll-behavior="smooth">
+      <body className={`${inter.className} bg-gray-50`} suppressHydrationWarning>
         <AuthProvider>
           <Navbar />
           <main className="min-h-screen pb-28 pt-14 md:pb-0 md:pt-16">

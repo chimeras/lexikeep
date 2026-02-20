@@ -25,8 +25,8 @@ export default function ProgressChart() {
     <div className="rounded-xl bg-white p-4 shadow-lg md:p-6">
       <h2 className="mb-4 text-lg font-bold text-gray-900 md:mb-6 md:text-xl">Weekly Progress</h2>
 
-      <div className="h-56 md:h-64">
-        <ResponsiveContainer width="100%" height="100%">
+      <div className="h-56 min-h-56 min-w-0 md:h-64">
+        <ResponsiveContainer width="100%" height="100%" minWidth={280} minHeight={220}>
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="date" stroke="#666" />

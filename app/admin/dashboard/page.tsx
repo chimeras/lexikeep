@@ -46,6 +46,7 @@ import {
   getTeacherBoosts,
   updateTeacherBoost,
 } from '@/lib/boosts-data';
+import InlineSpinner from '@/components/ui/InlineSpinner';
 
 const parseTags = (tagText: string) =>
   tagText
@@ -75,9 +76,10 @@ const sectionItems = [
 type SectionId = (typeof sectionItems)[number]['id'];
 
 export default function AdminDashboardPage() {
-  const { profile } = useAuth();
-  const [activeSection, setActiveSection] = useState<SectionId>('overview');
+  const { profile, loading: authLoading } = useAuth();
+  const canAccessTeacher = profile?.role === 'teacher' || profile?.role === 'admin';
 
+  const [activeSection, setActiveSection] = useState<SectionId>('overview');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [dailyChallenges, setDailyChallenges] = useState<DailyChallenge[]>([]);
   const [quests, setQuests] = useState<Quest[]>([]);
@@ -806,7 +808,7 @@ export default function AdminDashboardPage() {
       case 'materials-form':
         return (
           <article className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Manage Materials</h2>
               {editingMaterialId && <button type="button" onClick={resetMaterialForm} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">Cancel Edit</button>}
             </div>
@@ -815,14 +817,14 @@ export default function AdminDashboardPage() {
               <div className="md:col-span-2"><label className="mb-1 block text-sm font-medium text-gray-700">Description</label><textarea value={description} onChange={(event) => setDescription(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" rows={3} /></div>
               <div><label className="mb-1 block text-sm font-medium text-gray-700">Content URL</label><input value={contentUrl} onChange={(event) => setContentUrl(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" /></div>
               <div><label className="mb-1 block text-sm font-medium text-gray-700">Tags (comma-separated)</label><input value={tagText} onChange={(event) => setTagText(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" /></div>
-              <div className="md:col-span-2"><button type="submit" disabled={savingMaterial} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-blue-400">{savingMaterial ? 'Saving...' : editingMaterialId ? 'Update Material' : 'Create Material'}</button></div>
+              <div className="md:col-span-2"><button type="submit" disabled={savingMaterial} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-blue-400">{savingMaterial ? (<><InlineSpinner size={16} />Saving...</>) : editingMaterialId ? 'Update Material' : 'Create Material'}</button></div>
             </form>
           </article>
         );
       case 'daily-form':
         return (
           <article className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <h2 className="text-lg font-semibold text-gray-900">Manage Daily Challenges</h2>
               {editingDailyChallengeId && <button type="button" onClick={resetDailyChallengeForm} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">Cancel Edit</button>}
             </div>
@@ -834,14 +836,14 @@ export default function AdminDashboardPage() {
               <div><label className="mb-1 block text-sm font-medium text-gray-700">Target Value</label><input type="number" min={1} value={challengeTargetValue} onChange={(event) => setChallengeTargetValue(Number(event.target.value))} className="w-full rounded-lg border border-gray-300 p-3" /></div>
               <div><label className="mb-1 block text-sm font-medium text-gray-700">Reward Points</label><input type="number" min={0} value={challengeRewardPoints} onChange={(event) => setChallengeRewardPoints(Number(event.target.value))} className="w-full rounded-lg border border-gray-300 p-3" /></div>
               <div className="md:col-span-2 flex items-center gap-2"><input id="daily-active" type="checkbox" checked={challengeIsActive} onChange={(event) => setChallengeIsActive(event.target.checked)} /><label htmlFor="daily-active" className="text-sm text-gray-700">Active</label></div>
-              <div className="md:col-span-2"><button type="submit" disabled={savingDailyChallenge} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-blue-400">{savingDailyChallenge ? 'Saving...' : editingDailyChallengeId ? 'Update Daily Challenge' : 'Create Daily Challenge'}</button></div>
+              <div className="md:col-span-2"><button type="submit" disabled={savingDailyChallenge} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-blue-400">{savingDailyChallenge ? (<><InlineSpinner size={16} />Saving...</>) : editingDailyChallengeId ? 'Update Daily Challenge' : 'Create Daily Challenge'}</button></div>
             </form>
           </article>
         );
       case 'quest-form':
         return (
           <article className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
-            <div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-semibold text-gray-900">Manage Weekly Quests</h2>{editingQuestId && <button type="button" onClick={resetQuestForm} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">Cancel Edit</button>}</div>
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><h2 className="text-lg font-semibold text-gray-900">Manage Weekly Quests</h2>{editingQuestId && <button type="button" onClick={resetQuestForm} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">Cancel Edit</button>}</div>
             <form className="grid gap-3 md:grid-cols-2" onSubmit={handleQuestSubmit}>
               <div className="md:col-span-2"><label className="mb-1 block text-sm font-medium text-gray-700">Quest Title *</label><input required value={questTitle} onChange={(event) => setQuestTitle(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" /></div>
               <div className="md:col-span-2"><label className="mb-1 block text-sm font-medium text-gray-700">Description *</label><textarea required value={questDescription} onChange={(event) => setQuestDescription(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" rows={2} /></div>
@@ -851,7 +853,7 @@ export default function AdminDashboardPage() {
               <div><label className="mb-1 block text-sm font-medium text-gray-700">Start Date</label><input type="date" value={questStartDate} onChange={(event) => setQuestStartDate(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" /></div>
               <div><label className="mb-1 block text-sm font-medium text-gray-700">End Date</label><input type="date" value={questEndDate} onChange={(event) => setQuestEndDate(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" /></div>
               <div className="md:col-span-2 flex items-center gap-2"><input id="quest-active" type="checkbox" checked={questIsActive} onChange={(event) => setQuestIsActive(event.target.checked)} /><label htmlFor="quest-active" className="text-sm text-gray-700">Active</label></div>
-              <div className="md:col-span-2"><button type="submit" disabled={savingQuest} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-blue-400">{savingQuest ? 'Saving...' : editingQuestId ? 'Update Quest' : 'Create Quest'}</button></div>
+              <div className="md:col-span-2"><button type="submit" disabled={savingQuest} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-blue-400">{savingQuest ? (<><InlineSpinner size={16} />Saving...</>) : editingQuestId ? 'Update Quest' : 'Create Quest'}</button></div>
             </form>
           </article>
         );
@@ -860,7 +862,7 @@ export default function AdminDashboardPage() {
           <article className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
             <h2 className="text-lg font-semibold text-gray-900">Your Materials</h2>
             {loading ? <p className="mt-4 text-sm text-gray-600">Loading...</p> : materials.length === 0 ? <p className="mt-4 text-sm text-gray-600">No materials yet.</p> : (
-              <div className="mt-4 space-y-3">{materials.map((material) => (<div key={material.id} className="rounded-lg border border-gray-200 p-3"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div><p className="font-semibold text-gray-900">{material.title}</p><p className="mt-1 text-sm text-gray-600">{material.description || 'No description provided.'}</p><p className="mt-1 text-xs text-blue-600">{material.content_url || 'No URL attached.'}</p></div><div className="flex gap-2"><button type="button" onClick={() => { setEditingMaterialId(material.id); setTitle(material.title); setDescription(material.description ?? ''); setContentUrl(material.content_url ?? ''); setTagText((material.tags ?? []).join(', ')); setActiveSection('materials-form'); }} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200">Edit</button><button type="button" onClick={() => void handleDeleteMaterial(material.id)} className="rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700 disabled:bg-rose-400" disabled={deletingMaterialId === material.id}>{deletingMaterialId === material.id ? 'Deleting...' : 'Delete'}</button></div></div></div>))}</div>
+              <div className="mt-4 space-y-3">{materials.map((material) => (<div key={material.id} className="rounded-lg border border-gray-200 p-3"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div className="min-w-0"><p className="font-semibold text-gray-900">{material.title}</p><p className="mt-1 text-sm text-gray-600 break-words">{material.description || 'No description provided.'}</p><p className="mt-1 text-xs text-blue-600 break-all">{material.content_url || 'No URL attached.'}</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setEditingMaterialId(material.id); setTitle(material.title); setDescription(material.description ?? ''); setContentUrl(material.content_url ?? ''); setTagText((material.tags ?? []).join(', ')); setActiveSection('materials-form'); }} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200">Edit</button><button type="button" onClick={() => void handleDeleteMaterial(material.id)} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700 disabled:bg-rose-400" disabled={deletingMaterialId === material.id}>{deletingMaterialId === material.id ? (<><InlineSpinner size={12} />Deleting...</>) : 'Delete'}</button></div></div></div>))}</div>
             )}
           </article>
         );
@@ -869,7 +871,7 @@ export default function AdminDashboardPage() {
           <article className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
             <h2 className="text-lg font-semibold text-gray-900">Your Daily Challenges</h2>
             {dailyChallenges.length === 0 ? <p className="mt-4 text-sm text-gray-600">No daily challenges yet.</p> : (
-              <div className="mt-4 space-y-3">{dailyChallenges.map((challenge) => (<div key={challenge.id} className="rounded-lg border border-gray-200 p-3"><p className="font-semibold text-gray-900">{challenge.title}</p><p className="text-sm text-gray-600">{challenge.description}</p><p className="mt-1 text-xs text-blue-700">{challenge.challenge_date} | {challenge.challenge_type} target {challenge.target_value} | +{challenge.reward_points} pts</p><div className="mt-2 flex gap-2"><button type="button" onClick={() => { setEditingDailyChallengeId(challenge.id); setChallengeTitle(challenge.title); setChallengeDescription(challenge.description); setChallengeDate(challenge.challenge_date); setChallengeType(challenge.challenge_type); setChallengeTargetValue(challenge.target_value); setChallengeRewardPoints(challenge.reward_points); setChallengeIsActive(challenge.is_active); setActiveSection('daily-form'); }} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">Edit</button><button type="button" onClick={() => void handleDeleteDailyChallenge(challenge.id)} className="rounded-md bg-rose-600 px-3 py-1.5 text-xs text-white disabled:bg-rose-400" disabled={deletingChallengeId === challenge.id}>{deletingChallengeId === challenge.id ? 'Deleting...' : 'Delete'}</button></div></div>))}</div>
+              <div className="mt-4 space-y-3">{dailyChallenges.map((challenge) => (<div key={challenge.id} className="rounded-lg border border-gray-200 p-3"><p className="font-semibold text-gray-900">{challenge.title}</p><p className="text-sm text-gray-600">{challenge.description}</p><p className="mt-1 text-xs text-blue-700">{challenge.challenge_date} | {challenge.challenge_type} target {challenge.target_value} | +{challenge.reward_points} pts</p><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => { setEditingDailyChallengeId(challenge.id); setChallengeTitle(challenge.title); setChallengeDescription(challenge.description); setChallengeDate(challenge.challenge_date); setChallengeType(challenge.challenge_type); setChallengeTargetValue(challenge.target_value); setChallengeRewardPoints(challenge.reward_points); setChallengeIsActive(challenge.is_active); setActiveSection('daily-form'); }} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">Edit</button><button type="button" onClick={() => void handleDeleteDailyChallenge(challenge.id)} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-3 py-1.5 text-xs text-white disabled:bg-rose-400" disabled={deletingChallengeId === challenge.id}>{deletingChallengeId === challenge.id ? (<><InlineSpinner size={12} />Deleting...</>) : 'Delete'}</button></div></div>))}</div>
             )}
           </article>
         );
@@ -878,20 +880,20 @@ export default function AdminDashboardPage() {
           <article className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
             <h2 className="text-lg font-semibold text-gray-900">Your Quests</h2>
             {quests.length === 0 ? <p className="mt-4 text-sm text-gray-600">No quests yet.</p> : (
-              <div className="mt-4 space-y-3">{quests.map((quest) => (<div key={quest.id} className="rounded-lg border border-gray-200 p-3"><p className="font-semibold text-gray-900">{quest.title}</p><p className="text-sm text-gray-600">{quest.description}</p><p className="mt-1 text-xs text-blue-700">{quest.target_type} target {quest.target_value} | +{quest.reward_points} pts</p><div className="mt-2 flex gap-2"><button type="button" onClick={() => { setEditingQuestId(quest.id); setQuestTitle(quest.title); setQuestDescription(quest.description); setQuestType(quest.target_type); setQuestTargetValue(quest.target_value); setQuestRewardPoints(quest.reward_points); setQuestStartDate(quest.start_date ?? todayIso()); setQuestEndDate(quest.end_date ?? ''); setQuestIsActive(quest.is_active); setActiveSection('quest-form'); }} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">Edit</button><button type="button" onClick={() => void handleDeleteQuest(quest.id)} className="rounded-md bg-rose-600 px-3 py-1.5 text-xs text-white disabled:bg-rose-400" disabled={deletingQuestId === quest.id}>{deletingQuestId === quest.id ? 'Deleting...' : 'Delete'}</button></div></div>))}</div>
+              <div className="mt-4 space-y-3">{quests.map((quest) => (<div key={quest.id} className="rounded-lg border border-gray-200 p-3"><p className="font-semibold text-gray-900">{quest.title}</p><p className="text-sm text-gray-600">{quest.description}</p><p className="mt-1 text-xs text-blue-700">{quest.target_type} target {quest.target_value} | +{quest.reward_points} pts</p><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => { setEditingQuestId(quest.id); setQuestTitle(quest.title); setQuestDescription(quest.description); setQuestType(quest.target_type); setQuestTargetValue(quest.target_value); setQuestRewardPoints(quest.reward_points); setQuestStartDate(quest.start_date ?? todayIso()); setQuestEndDate(quest.end_date ?? ''); setQuestIsActive(quest.is_active); setActiveSection('quest-form'); }} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">Edit</button><button type="button" onClick={() => void handleDeleteQuest(quest.id)} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-3 py-1.5 text-xs text-white disabled:bg-rose-400" disabled={deletingQuestId === quest.id}>{deletingQuestId === quest.id ? (<><InlineSpinner size={12} />Deleting...</>) : 'Delete'}</button></div></div>))}</div>
             )}
           </article>
         );
       case 'teams-form':
         return (
           <article className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
-            <div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-semibold text-gray-900">Manage Teams</h2>{editingTeamId && <button type="button" onClick={resetTeamForm} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">Cancel Edit</button>}</div>
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><h2 className="text-lg font-semibold text-gray-900">Manage Teams</h2>{editingTeamId && <button type="button" onClick={resetTeamForm} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">Cancel Edit</button>}</div>
             <form className="grid gap-3 md:grid-cols-2" onSubmit={handleTeamSubmit}>
               <div><label className="mb-1 block text-sm font-medium text-gray-700">Team Name *</label><input required value={teamName} onChange={(event) => setTeamName(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" /></div>
               <div><label className="mb-1 block text-sm font-medium text-gray-700">Color</label><input type="color" value={teamColorHex} onChange={(event) => setTeamColorHex(event.target.value)} className="h-12 w-full rounded-lg border border-gray-300 p-2" /></div>
               <div className="md:col-span-2"><label className="mb-1 block text-sm font-medium text-gray-700">Description</label><textarea value={teamDescription} onChange={(event) => setTeamDescription(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" rows={2} /></div>
               <div className="md:col-span-2 flex items-center gap-2"><input id="team-active" type="checkbox" checked={teamIsActive} onChange={(event) => setTeamIsActive(event.target.checked)} /><label htmlFor="team-active" className="text-sm text-gray-700">Active</label></div>
-              <div className="md:col-span-2"><button type="submit" disabled={savingTeam} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-blue-400">{savingTeam ? 'Saving...' : editingTeamId ? 'Update Team' : 'Create Team'}</button></div>
+              <div className="md:col-span-2"><button type="submit" disabled={savingTeam} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-blue-400">{savingTeam ? (<><InlineSpinner size={16} />Saving...</>) : editingTeamId ? 'Update Team' : 'Create Team'}</button></div>
             </form>
           </article>
         );
@@ -918,18 +920,18 @@ export default function AdminDashboardPage() {
                     <option value="member">Member</option>
                     <option value="captain">Captain</option>
                   </select>
-                  <button type="submit" disabled={assigningMember || !selectedTeamId} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-blue-400">{assigningMember ? 'Assigning...' : 'Assign'}</button>
+                  <button type="submit" disabled={assigningMember || !selectedTeamId} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-blue-400">{assigningMember ? (<><InlineSpinner size={16} />Assigning...</>) : 'Assign'}</button>
                 </form>
                 <div className="space-y-2">
                   {teamMembers.length === 0 ? <p className="text-sm text-gray-600">No members in this team yet.</p> : teamMembers.map((member) => {
                     const student = students.find((item) => item.id === member.student_id);
                     return (
-                      <div key={member.id} className="flex items-center justify-between rounded-lg border border-gray-200 p-3">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">{student?.username ?? member.student_id.slice(0, 8)}</p>
+                      <div key={member.id} className="flex flex-col gap-2 rounded-lg border border-gray-200 p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-gray-900">{student?.username ?? member.student_id.slice(0, 8)}</p>
                           <p className="text-xs text-gray-600">{member.role} | {student?.points ?? 0} pts</p>
                         </div>
-                        <button type="button" onClick={() => void handleRemoveMember(member.student_id)} className="rounded-md bg-rose-600 px-3 py-1.5 text-xs text-white disabled:bg-rose-400" disabled={removingMemberStudentId === member.student_id}>{removingMemberStudentId === member.student_id ? 'Removing...' : 'Remove'}</button>
+                        <button type="button" onClick={() => void handleRemoveMember(member.student_id)} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-3 py-1.5 text-xs text-white disabled:bg-rose-400" disabled={removingMemberStudentId === member.student_id}>{removingMemberStudentId === member.student_id ? (<><InlineSpinner size={12} />Removing...</>) : 'Remove'}</button>
                       </div>
                     );
                   })}
@@ -972,7 +974,7 @@ export default function AdminDashboardPage() {
 
             {selectedStudentId && (
               <>
-                <div className="mt-4 grid gap-3 rounded-lg border border-gray-200 p-3 md:grid-cols-[1fr_220px_180px_auto_auto_auto] md:items-end">
+                <div className="mt-4 grid gap-3 rounded-lg border border-gray-200 p-3 sm:grid-cols-2 lg:grid-cols-[1fr_220px_180px_auto_auto_auto] lg:items-end">
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Search</label>
                     <input
@@ -1115,14 +1117,14 @@ export default function AdminDashboardPage() {
           <article className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
             <h2 className="text-lg font-semibold text-gray-900">Your Teams</h2>
             {teams.length === 0 ? <p className="mt-4 text-sm text-gray-600">No teams yet.</p> : (
-              <div className="mt-4 space-y-3">{teams.map((team) => (<div key={team.id} className="rounded-lg border border-gray-200 p-3"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-gray-900">{team.name}</p><p className="text-sm text-gray-600">{team.description || 'No description.'}</p><div className="mt-1 inline-flex items-center gap-2 text-xs text-gray-600"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: team.color_hex ?? '#2563eb' }} />{team.is_active ? 'Active' : 'Inactive'}</div></div><div className="flex gap-2"><button type="button" onClick={() => { setEditingTeamId(team.id); setTeamName(team.name); setTeamDescription(team.description ?? ''); setTeamColorHex(team.color_hex ?? '#2563eb'); setTeamIsActive(team.is_active); setActiveSection('teams-form'); }} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">Edit</button><button type="button" onClick={() => void handleDeleteTeam(team.id)} className="rounded-md bg-rose-600 px-3 py-1.5 text-xs text-white disabled:bg-rose-400" disabled={deletingTeamId === team.id}>{deletingTeamId === team.id ? 'Deleting...' : 'Delete'}</button></div></div></div>))}</div>
+              <div className="mt-4 space-y-3">{teams.map((team) => (<div key={team.id} className="rounded-lg border border-gray-200 p-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="font-semibold text-gray-900">{team.name}</p><p className="text-sm text-gray-600 break-words">{team.description || 'No description.'}</p><div className="mt-1 inline-flex items-center gap-2 text-xs text-gray-600"><span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: team.color_hex ?? '#2563eb' }} />{team.is_active ? 'Active' : 'Inactive'}</div></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setEditingTeamId(team.id); setTeamName(team.name); setTeamDescription(team.description ?? ''); setTeamColorHex(team.color_hex ?? '#2563eb'); setTeamIsActive(team.is_active); setActiveSection('teams-form'); }} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">Edit</button><button type="button" onClick={() => void handleDeleteTeam(team.id)} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-3 py-1.5 text-xs text-white disabled:bg-rose-400" disabled={deletingTeamId === team.id}>{deletingTeamId === team.id ? (<><InlineSpinner size={12} />Deleting...</>) : 'Delete'}</button></div></div></div>))}</div>
             )}
           </article>
         );
       case 'boosts-form':
         return (
           <article className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
-            <div className="mb-4 flex items-center justify-between"><h2 className="text-lg font-semibold text-gray-900">Teacher Boosts</h2>{editingBoostId && <button type="button" onClick={resetBoostForm} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">Cancel Edit</button>}</div>
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><h2 className="text-lg font-semibold text-gray-900">Teacher Boosts</h2>{editingBoostId && <button type="button" onClick={resetBoostForm} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">Cancel Edit</button>}</div>
             <form className="grid gap-3 md:grid-cols-2" onSubmit={handleBoostSubmit}>
               <div><label className="mb-1 block text-sm font-medium text-gray-700">Title *</label><input required value={boostTitle} onChange={(event) => setBoostTitle(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" /></div>
               <div><label className="mb-1 block text-sm font-medium text-gray-700">Type</label><select value={boostType} onChange={(event) => setBoostType(event.target.value as 'double_xp' | 'bonus_flat')} className="w-full rounded-lg border border-gray-300 p-3"><option value="double_xp">Double XP (Multiplier)</option><option value="bonus_flat">Flat Bonus</option></select></div>
@@ -1132,7 +1134,7 @@ export default function AdminDashboardPage() {
               <div><label className="mb-1 block text-sm font-medium text-gray-700">Starts At</label><input type="datetime-local" value={boostStartsAt} onChange={(event) => setBoostStartsAt(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" /></div>
               <div><label className="mb-1 block text-sm font-medium text-gray-700">Ends At</label><input type="datetime-local" value={boostEndsAt} onChange={(event) => setBoostEndsAt(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" /></div>
               <div className="md:col-span-2 flex items-center gap-2"><input id="boost-active" type="checkbox" checked={boostIsActive} onChange={(event) => setBoostIsActive(event.target.checked)} /><label htmlFor="boost-active" className="text-sm text-gray-700">Active</label></div>
-              <div className="md:col-span-2"><button type="submit" disabled={savingBoost} className="rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-blue-400">{savingBoost ? 'Saving...' : editingBoostId ? 'Update Boost' : 'Create Boost'}</button></div>
+              <div className="md:col-span-2"><button type="submit" disabled={savingBoost} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-blue-400">{savingBoost ? (<><InlineSpinner size={16} />Saving...</>) : editingBoostId ? 'Update Boost' : 'Create Boost'}</button></div>
             </form>
           </article>
         );
@@ -1146,7 +1148,7 @@ export default function AdminDashboardPage() {
               <div className="mt-4 space-y-3">
                 {boosts.map((boost) => (
                   <div key={boost.id} className="rounded-lg border border-gray-200 p-3">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="font-semibold text-gray-900">{boost.title}</p>
                         <p className="text-sm text-gray-600">{boost.description || 'No description.'}</p>
@@ -1157,7 +1159,7 @@ export default function AdminDashboardPage() {
                           {new Date(boost.ends_at).toLocaleString()}
                         </p>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
                           onClick={() => {
@@ -1179,10 +1181,10 @@ export default function AdminDashboardPage() {
                         <button
                           type="button"
                           onClick={() => void handleDeleteBoost(boost.id)}
-                          className="rounded-md bg-rose-600 px-3 py-1.5 text-xs text-white disabled:bg-rose-400"
+                          className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-3 py-1.5 text-xs text-white disabled:bg-rose-400"
                           disabled={deletingBoostId === boost.id}
                         >
-                          {deletingBoostId === boost.id ? 'Deleting...' : 'Delete'}
+                          {deletingBoostId === boost.id ? (<><InlineSpinner size={12} />Deleting...</>) : 'Delete'}
                         </button>
                       </div>
                     </div>
@@ -1196,6 +1198,41 @@ export default function AdminDashboardPage() {
         return null;
     }
   };
+
+  if (authLoading) {
+    return (
+      <section className="mx-auto max-w-4xl px-4 py-10">
+        <div className="rounded-xl bg-white p-4 text-sm text-gray-600 shadow-sm ring-1 ring-gray-200">
+          Loading teacher dashboard...
+        </div>
+      </section>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <section className="mx-auto max-w-4xl px-4 py-10">
+        <div className="rounded-xl bg-white p-6 text-sm text-gray-700 shadow-sm ring-1 ring-gray-200">
+          <p className="font-semibold text-gray-900">You must be signed in to access teacher mode.</p>
+          <p className="mt-1 text-gray-600">Please log in with a teacher account.</p>
+        </div>
+      </section>
+    );
+  }
+
+  if (!canAccessTeacher) {
+    return (
+      <section className="mx-auto max-w-4xl px-4 py-10">
+        <div className="rounded-xl bg-white p-6 text-sm text-gray-700 shadow-sm ring-1 ring-gray-200">
+          <p className="font-semibold text-gray-900">Teacher mode is restricted.</p>
+          <p className="mt-1 text-gray-600">
+            Your account role is <span className="font-semibold">{profile.role ?? 'student'}</span>. Ask an admin to upgrade
+            your role to teacher to access this area.
+          </p>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="mx-auto max-w-6xl px-4 py-5 md:px-6 md:py-8">

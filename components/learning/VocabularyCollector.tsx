@@ -8,6 +8,7 @@ import { syncStudentBadges } from '@/lib/badges-service';
 import { scoreContextUsage, type ContextScoreResult } from '@/lib/context-score';
 import { awardStudentPoints, createStudentExpression, createStudentVocabulary } from '@/lib/student-data';
 import { supabase } from '@/lib/supabase';
+import InlineSpinner from '@/components/ui/InlineSpinner';
 
 type SourceType = 'material' | 'web' | 'manual';
 type EntryType = 'word' | 'expression';
@@ -442,7 +443,7 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
             disabled={isGenerating || isSubmitting}
             className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            <Sparkles size={16} />
+            {isGenerating ? <InlineSpinner size={16} /> : <Sparkles size={16} />}
             {isGenerating ? 'Generating...' : 'Generate with Llama 3'}
           </button>
         </div>
@@ -578,10 +579,17 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
         <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
           <button
             type="submit"
-            className="rounded-lg bg-blue-600 px-6 py-3 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
             disabled={isSubmitting}
           >
-            {isSubmitting ? 'Saving...' : 'Collect and Earn Points'}
+            {isSubmitting ? (
+              <>
+                <InlineSpinner size={16} />
+                Saving...
+              </>
+            ) : (
+              'Collect and Earn Points'
+            )}
           </button>
           <button
             type="button"

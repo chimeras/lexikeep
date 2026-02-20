@@ -15,6 +15,7 @@ import {
   submitDuelAnswer,
 } from '@/lib/duel-data';
 import type { Duel, DuelAnswer, DuelParticipant, DuelRound } from '@/types';
+import InlineSpinner from '@/components/ui/InlineSpinner';
 
 const toName = (id: string, me?: string) => (id === me ? 'You' : `${id.slice(0, 6)}...`);
 
@@ -210,9 +211,16 @@ export default function DuelPage() {
               type="button"
               onClick={() => void handleCreate()}
               disabled={submitting || !studentId}
-              className="mt-4 rounded-lg bg-gradient-to-r from-rose-600 to-orange-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-rose-600 to-orange-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
-              {submitting ? 'Creating...' : 'Create Duel'}
+              {submitting ? (
+                <>
+                  <InlineSpinner size={16} />
+                  Creating...
+                </>
+              ) : (
+                'Create Duel'
+              )}
             </button>
           </article>
 
@@ -231,9 +239,16 @@ export default function DuelPage() {
                       type="button"
                       onClick={() => void handleJoin(item.id)}
                       disabled={submitting}
-                      className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                      className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
                     >
-                      Join
+                      {submitting ? (
+                        <>
+                          <InlineSpinner size={12} />
+                          Joining...
+                        </>
+                      ) : (
+                        'Join'
+                      )}
                     </button>
                   </div>
                 ))}
@@ -301,9 +316,16 @@ export default function DuelPage() {
                     type="button"
                     onClick={() => void handleStart()}
                     disabled={submitting}
-                    className="mt-4 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                    className="mt-4 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                   >
-                    Start Duel
+                    {submitting ? (
+                      <>
+                        <InlineSpinner size={16} />
+                        Starting...
+                      </>
+                    ) : (
+                      'Start Duel'
+                    )}
                   </button>
                 ) : (
                   <p className="mt-3 text-sm text-slate-600">
@@ -332,8 +354,9 @@ export default function DuelPage() {
                       type="button"
                       onClick={() => void handleAnswer(option)}
                       disabled={submitting}
-                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm font-medium text-slate-800 hover:border-orange-300 hover:bg-orange-50 disabled:opacity-60"
+                      className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm font-medium text-slate-800 hover:border-orange-300 hover:bg-orange-50 disabled:opacity-60"
                     >
+                      {submitting && <InlineSpinner size={14} className="shrink-0" />}
                       {option}
                     </button>
                   ))}
@@ -364,9 +387,16 @@ export default function DuelPage() {
                   type="button"
                   onClick={() => void handleRematch()}
                   disabled={submitting}
-                  className="mt-3 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                  className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
                 >
-                  Rematch
+                  {submitting ? (
+                    <>
+                      <InlineSpinner size={14} />
+                      Starting...
+                    </>
+                  ) : (
+                    'Rematch'
+                  )}
                 </button>
               </div>
             )}

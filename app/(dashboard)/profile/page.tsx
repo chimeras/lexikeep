@@ -8,6 +8,7 @@ import { getLevelInfo } from '@/lib/levels';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { updateProfileAvatar } from '@/lib/supabase';
 import { getStudentMetrics, type StudentMetrics } from '@/lib/student-data';
+import InlineSpinner from '@/components/ui/InlineSpinner';
 
 const emptyMetrics: StudentMetrics = {
   points: 0,
@@ -123,9 +124,16 @@ export default function ProfilePage() {
             type="button"
             onClick={() => void handleSaveAvatar()}
             disabled={savingAvatar}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:bg-blue-400"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:bg-blue-400"
           >
-            {savingAvatar ? 'Saving...' : 'Save Avatar'}
+            {savingAvatar ? (
+              <>
+                <InlineSpinner size={16} />
+                Saving...
+              </>
+            ) : (
+              'Save Avatar'
+            )}
           </button>
           <button
             type="button"

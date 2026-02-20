@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FormEvent, useState } from 'react';
 import { getDashboardRoute } from '@/lib/auth';
 import { signUp, upsertProfile } from '@/lib/supabase';
+import InlineSpinner from '@/components/ui/InlineSpinner';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -92,10 +93,17 @@ export default function RegisterPage() {
           </div>
           {errorMessage && <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{errorMessage}</p>}
           <button
-            className="w-full rounded-lg bg-blue-600 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-3 font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
             disabled={submitting}
           >
-            {submitting ? 'Creating account...' : 'Register'}
+            {submitting ? (
+              <>
+                <InlineSpinner size={16} />
+                Creating account...
+              </>
+            ) : (
+              'Register'
+            )}
           </button>
         </form>
 

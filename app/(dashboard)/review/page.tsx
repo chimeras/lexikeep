@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { getDueReviewItems, submitReviewRating } from '@/lib/review-data';
 import type { ReviewItem, StudentBadge } from '@/types';
+import InlineSpinner from '@/components/ui/InlineSpinner';
 
 export default function ReviewPage() {
   const { profile, refreshProfile } = useAuth();
@@ -138,16 +139,32 @@ export default function ReviewPage() {
               disabled={submitting || !isFlipped}
               className="flex items-center justify-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 hover:bg-amber-100 disabled:opacity-60"
             >
-              <RotateCcw size={16} />
-              Need Practice (+2)
+              {submitting ? (
+                <>
+                  <InlineSpinner size={16} />
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <RotateCcw size={16} />
+                  Need Practice (+2)
+                </>
+              )}
             </button>
             <button
               type="button"
               onClick={() => void onRate('easy')}
               disabled={submitting || !isFlipped}
-              className="rounded-lg bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-3 text-sm font-semibold text-white hover:from-blue-700 hover:to-cyan-600 disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-500 px-4 py-3 text-sm font-semibold text-white hover:from-blue-700 hover:to-cyan-600 disabled:opacity-60"
             >
-              I Got It (+6)
+              {submitting ? (
+                <>
+                  <InlineSpinner size={16} />
+                  Submitting...
+                </>
+              ) : (
+                'I Got It (+6)'
+              )}
             </button>
           </div>
           {!isFlipped && (

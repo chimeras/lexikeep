@@ -1,10 +1,11 @@
 'use client';
 
-import { BookOpen, Brain, Home, Layers, Trophy, UserRound } from 'lucide-react';
+import { BookOpen, Brain, Home, Layers, MoreHorizontal, Trophy, UserRound } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { getDashboardRoute } from '@/lib/auth';
 import { useAuth } from '@/components/providers/AuthProvider';
 
@@ -27,10 +28,15 @@ export function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
   const { profile, loading, logout, isAuthenticated } = useAuth();
+  const [moreOpen, setMoreOpen] = useState(false);
   const isAdminArea = pathname.startsWith('/admin');
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
   const homeHref = getDashboardRoute(profile?.role);
   const canAccessTeacher = profile?.role === 'teacher' || profile?.role === 'admin';
+
+  useEffect(() => {
+    setMoreOpen(false);
+  }, [pathname]);
 
   const handleLogout = async () => {
     await logout();
@@ -51,10 +57,11 @@ export function Navbar() {
           {!loading && isAuthenticated && (
             <button
               type="button"
-              onClick={() => void handleLogout()}
-              className="rounded-md border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 md:hidden"
+              onClick={() => setMoreOpen((previous) => !previous)}
+              className="rounded-md border border-gray-300 p-1.5 text-gray-700 hover:bg-gray-100 md:hidden"
+              aria-label="Open more menu"
             >
-              Logout
+              <MoreHorizontal size={18} />
             </button>
           )}
 
@@ -122,6 +129,37 @@ export function Navbar() {
           </div>
         </div>
       </header>
+
+      {!loading && isAuthenticated && moreOpen && (
+        <>
+          <div className="fixed inset-0 top-14 z-40 bg-black/20 md:hidden" onClick={() => setMoreOpen(false)} aria-hidden="true" />
+          <div className="fixed right-3 top-16 z-50 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-xl md:hidden">
+            <Link href="/dashboard" className="block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              Student Dashboard
+            </Link>
+            {!isAdminArea && (
+              <Link href="/materials" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Materials
+              </Link>
+            )}
+            <Link href="/profile" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              Profile
+            </Link>
+            {canAccessTeacher && (
+              <Link href="/admin/dashboard" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Teacher Dashboard
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              className="mt-1 block w-full rounded-md px-3 py-2 text-left text-sm font-semibold text-rose-700 hover:bg-rose-50"
+            >
+              Logout
+            </button>
+          </div>
+        </>
+      )}
 
       {!loading && isAuthenticated && (
         <nav

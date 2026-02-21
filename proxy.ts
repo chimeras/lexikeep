@@ -1,6 +1,5 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
-import { getDashboardRoute } from '@/lib/auth';
 
 const PUBLIC_PATHS = ['/', '/login', '/register', '/auth/callback'];
 
@@ -46,10 +45,9 @@ export async function proxy(request: NextRequest) {
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
   const role = profile?.role ?? 'student';
-  const dashboardRoute = getDashboardRoute(role);
 
   if (isPublic) {
-    return NextResponse.redirect(new URL(dashboardRoute, request.url));
+    return response;
   }
 
   if (pathname.startsWith('/admin') && role === 'student') {

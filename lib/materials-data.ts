@@ -20,10 +20,11 @@ interface MaterialInput {
   title: string;
   description?: string;
   contentUrl?: string;
+  classId?: string;
   tags?: string[];
 }
 
-export const createMaterial = async ({ teacherId, title, description, contentUrl, tags = [] }: MaterialInput) => {
+export const createMaterial = async ({ teacherId, title, description, contentUrl, classId, tags = [] }: MaterialInput) => {
   const { data, error } = await supabase
     .from('materials')
     .insert({
@@ -31,6 +32,7 @@ export const createMaterial = async ({ teacherId, title, description, contentUrl
       title,
       description: description || null,
       content_url: contentUrl || null,
+      class_id: classId || null,
       tags,
     })
     .select()
@@ -44,6 +46,7 @@ interface MaterialUpdateInput {
   title: string;
   description?: string;
   contentUrl?: string;
+  classId?: string;
   tags?: string[];
 }
 
@@ -53,6 +56,7 @@ export const updateMaterial = async ({
   title,
   description,
   contentUrl,
+  classId,
   tags = [],
 }: MaterialUpdateInput) => {
   const { data, error } = await supabase
@@ -62,6 +66,7 @@ export const updateMaterial = async ({
       title,
       description: description || null,
       content_url: contentUrl || null,
+      class_id: classId || null,
       tags,
     })
     .eq('id', id)

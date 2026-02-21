@@ -17,8 +17,26 @@ CREATE TABLE IF NOT EXISTS materials (
   description TEXT,
   content_url TEXT,
   teacher_id UUID REFERENCES profiles(id),
+  class_id UUID,
   tags TEXT[],
   created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS classes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  teacher_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS class_memberships (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  joined_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(class_id, student_id)
 );
 
 CREATE TABLE IF NOT EXISTS vocabulary (
@@ -278,6 +296,22 @@ ALTER TABLE expressions
 ALTER TABLE expressions
   ADD COLUMN IF NOT EXISTS ai_provider TEXT;
 
+ALTER TABLE materials
+  ADD COLUMN IF NOT EXISTS class_id UUID;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'materials_class_id_fkey'
+  ) THEN
+    ALTER TABLE materials
+      ADD CONSTRAINT materials_class_id_fkey
+      FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 CREATE OR REPLACE FUNCTION normalize_lexikeep_text(input_text TEXT)
 RETURNS TEXT AS $$
 BEGIN
@@ -346,6 +380,10 @@ CREATE INDEX IF NOT EXISTS vocabulary_normalized_word_idx ON vocabulary(normaliz
 CREATE INDEX IF NOT EXISTS vocabulary_normalized_word_trgm_idx ON vocabulary USING gin (normalized_word gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS expressions_normalized_expression_idx ON expressions(normalized_expression);
 CREATE INDEX IF NOT EXISTS expressions_normalized_expression_trgm_idx ON expressions USING gin (normalized_expression gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS classes_teacher_idx ON classes(teacher_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS class_memberships_class_idx ON class_memberships(class_id, joined_at DESC);
+CREATE INDEX IF NOT EXISTS class_memberships_student_idx ON class_memberships(student_id);
+CREATE INDEX IF NOT EXISTS materials_class_id_idx ON materials(class_id, created_at DESC);
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE materials ENABLE ROW LEVEL SECURITY;
@@ -368,6 +406,8 @@ ALTER TABLE stream_posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stream_post_likes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stream_post_comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stream_user_mutes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE classes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE class_memberships ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "profiles_select_authenticated" ON profiles;
 CREATE POLICY "profiles_select_authenticated" ON profiles
@@ -386,15 +426,81 @@ CREATE POLICY "profiles_update_own" ON profiles
   WITH CHECK (auth.uid() = id);
 
 DROP POLICY IF EXISTS "materials_select_all" ON materials;
-CREATE POLICY "materials_select_all" ON materials
+DROP POLICY IF EXISTS "materials_select_accessible" ON materials;
+CREATE POLICY "materials_select_accessible" ON materials
   FOR SELECT
-  USING (true);
+  USING (
+    teacher_id = auth.uid()
+    OR class_id IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM class_memberships cm
+      WHERE cm.class_id = materials.class_id
+        AND cm.student_id = auth.uid()
+    )
+  );
 
 DROP POLICY IF EXISTS "materials_teacher_manage" ON materials;
 CREATE POLICY "materials_teacher_manage" ON materials
   FOR ALL
   USING (teacher_id = auth.uid())
   WITH CHECK (teacher_id = auth.uid());
+
+DROP POLICY IF EXISTS "classes_select_members_or_teacher" ON classes;
+CREATE POLICY "classes_select_members_or_teacher" ON classes
+  FOR SELECT
+  USING (
+    teacher_id = auth.uid()
+    OR EXISTS (
+      SELECT 1
+      FROM class_memberships cm
+      WHERE cm.class_id = classes.id
+        AND cm.student_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "classes_teacher_manage" ON classes;
+CREATE POLICY "classes_teacher_manage" ON classes
+  FOR ALL
+  USING (teacher_id = auth.uid())
+  WITH CHECK (teacher_id = auth.uid());
+
+DROP POLICY IF EXISTS "class_memberships_select_relevant" ON class_memberships;
+CREATE POLICY "class_memberships_select_relevant" ON class_memberships
+  FOR SELECT
+  USING (
+    student_id = auth.uid()
+    OR EXISTS (
+      SELECT 1
+      FROM classes c
+      WHERE c.id = class_memberships.class_id
+        AND c.teacher_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "class_memberships_insert_teacher_manage" ON class_memberships;
+CREATE POLICY "class_memberships_insert_teacher_manage" ON class_memberships
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM classes c
+      WHERE c.id = class_memberships.class_id
+        AND c.teacher_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "class_memberships_delete_teacher_manage" ON class_memberships;
+CREATE POLICY "class_memberships_delete_teacher_manage" ON class_memberships
+  FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM classes c
+      WHERE c.id = class_memberships.class_id
+        AND c.teacher_id = auth.uid()
+    )
+  );
 
 DROP POLICY IF EXISTS "vocabulary_select_authenticated" ON vocabulary;
 CREATE POLICY "vocabulary_select_authenticated" ON vocabulary

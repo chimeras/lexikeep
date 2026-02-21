@@ -14,8 +14,26 @@ export interface Material {
   description: string | null;
   content_url: string | null;
   teacher_id: string | null;
+  class_id: string | null;
   tags: string[] | null;
   created_at: string;
+  class?: Pick<Classroom, 'id' | 'name'> | null;
+}
+
+export interface Classroom {
+  id: string;
+  name: string;
+  description: string | null;
+  teacher_id: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ClassMembership {
+  id: string;
+  class_id: string;
+  student_id: string;
+  joined_at: string;
 }
 
 export interface Vocabulary {

@@ -25,6 +25,7 @@ import type {
   Material,
   Profile,
   Quest,
+  Classroom,
   Team,
   TeamMembership,
   TeacherBoost,
@@ -46,6 +47,7 @@ import {
   getTeacherBoosts,
   updateTeacherBoost,
 } from '@/lib/boosts-data';
+import { getTeacherClasses } from '@/lib/classes-data';
 import InlineSpinner from '@/components/ui/InlineSpinner';
 
 const parseTags = (tagText: string) =>
@@ -84,6 +86,7 @@ export default function AdminDashboardPage() {
   const [dailyChallenges, setDailyChallenges] = useState<DailyChallenge[]>([]);
   const [quests, setQuests] = useState<Quest[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [classes, setClasses] = useState<Classroom[]>([]);
   const [boosts, setBoosts] = useState<TeacherBoost[]>([]);
   const [students, setStudents] = useState<Array<Pick<Profile, 'id' | 'username' | 'avatar_url' | 'points' | 'role'>>>([]);
   const [selectedStudentId, setSelectedStudentId] = useState('');
@@ -139,6 +142,7 @@ export default function AdminDashboardPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [contentUrl, setContentUrl] = useState('');
+  const [selectedMaterialClassId, setSelectedMaterialClassId] = useState('');
   const [tagText, setTagText] = useState('');
 
   const [challengeTitle, setChallengeTitle] = useState('');
@@ -177,6 +181,7 @@ export default function AdminDashboardPage() {
     setTitle('');
     setDescription('');
     setContentUrl('');
+    setSelectedMaterialClassId('');
     setTagText('');
     setEditingMaterialId(null);
   };
@@ -369,13 +374,14 @@ export default function AdminDashboardPage() {
     if (!profile?.id) return;
     setLoading(true);
 
-    const [materialsRes, studentsRes, competitionsRes, dailyChallengesRes, questsRes, teamsRes, rosterRes, boostsRes, reviewAnalyticsRes, insightsRes] = await Promise.all([
+    const [materialsRes, studentsRes, competitionsRes, dailyChallengesRes, questsRes, teamsRes, classesRes, rosterRes, boostsRes, reviewAnalyticsRes, insightsRes] = await Promise.all([
       getTeacherMaterials(profile.id),
       supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student'),
       supabase.from('competitions').select('*', { count: 'exact', head: true }).eq('teacher_id', profile.id),
       getTeacherDailyChallenges(profile.id),
       getTeacherQuests(profile.id),
       getTeacherTeams(profile.id),
+      getTeacherClasses(profile.id),
       getStudentsForTeams(),
       getTeacherBoosts(profile.id),
       getReviewAnalytics(),
@@ -386,6 +392,7 @@ export default function AdminDashboardPage() {
     setDailyChallenges(dailyChallengesRes.data);
     setQuests(questsRes.data);
     setTeams(teamsRes.data);
+    setClasses(classesRes.data);
     setStudents(rosterRes.data);
     setBoosts(boostsRes.data);
     setReviewAnalytics(reviewAnalyticsRes);
@@ -454,6 +461,7 @@ export default function AdminDashboardPage() {
       title,
       description,
       contentUrl,
+      classId: selectedMaterialClassId || undefined,
       tags: parseTags(tagText),
     };
 
@@ -816,7 +824,9 @@ export default function AdminDashboardPage() {
               <div className="md:col-span-2"><label className="mb-1 block text-sm font-medium text-gray-700">Title *</label><input required value={title} onChange={(event) => setTitle(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" /></div>
               <div className="md:col-span-2"><label className="mb-1 block text-sm font-medium text-gray-700">Description</label><textarea value={description} onChange={(event) => setDescription(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" rows={3} /></div>
               <div><label className="mb-1 block text-sm font-medium text-gray-700">Content URL</label><input value={contentUrl} onChange={(event) => setContentUrl(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" /></div>
-              <div><label className="mb-1 block text-sm font-medium text-gray-700">Tags (comma-separated)</label><input value={tagText} onChange={(event) => setTagText(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" /></div>
+              <div><label className="mb-1 block text-sm font-medium text-gray-700">Target Class</label><select value={selectedMaterialClassId} onChange={(event) => setSelectedMaterialClassId(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3"><option value="">All students (global)</option>{classes.filter((item) => item.is_active).map((item) => (<option key={item.id} value={item.id}>{item.name}</option>))}</select></div>
+              <div className="md:col-span-2"><label className="mb-1 block text-sm font-medium text-gray-700">Tags (comma-separated)</label><input value={tagText} onChange={(event) => setTagText(event.target.value)} className="w-full rounded-lg border border-gray-300 p-3" /></div>
+              <div className="md:col-span-2 text-xs text-gray-500">Need to create classes first? Go to <a href="/admin/classes" className="font-semibold text-blue-700 hover:underline">Class Management</a>.</div>
               <div className="md:col-span-2"><button type="submit" disabled={savingMaterial} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white disabled:bg-blue-400">{savingMaterial ? (<><InlineSpinner size={16} />Saving...</>) : editingMaterialId ? 'Update Material' : 'Create Material'}</button></div>
             </form>
           </article>
@@ -862,7 +872,7 @@ export default function AdminDashboardPage() {
           <article className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
             <h2 className="text-lg font-semibold text-gray-900">Your Materials</h2>
             {loading ? <p className="mt-4 text-sm text-gray-600">Loading...</p> : materials.length === 0 ? <p className="mt-4 text-sm text-gray-600">No materials yet.</p> : (
-              <div className="mt-4 space-y-3">{materials.map((material) => (<div key={material.id} className="rounded-lg border border-gray-200 p-3"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div className="min-w-0"><p className="font-semibold text-gray-900">{material.title}</p><p className="mt-1 text-sm text-gray-600 break-words">{material.description || 'No description provided.'}</p><p className="mt-1 text-xs text-blue-600 break-all">{material.content_url || 'No URL attached.'}</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setEditingMaterialId(material.id); setTitle(material.title); setDescription(material.description ?? ''); setContentUrl(material.content_url ?? ''); setTagText((material.tags ?? []).join(', ')); setActiveSection('materials-form'); }} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200">Edit</button><button type="button" onClick={() => void handleDeleteMaterial(material.id)} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700 disabled:bg-rose-400" disabled={deletingMaterialId === material.id}>{deletingMaterialId === material.id ? (<><InlineSpinner size={12} />Deleting...</>) : 'Delete'}</button></div></div></div>))}</div>
+              <div className="mt-4 space-y-3">{materials.map((material) => (<div key={material.id} className="rounded-lg border border-gray-200 p-3"><div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between"><div className="min-w-0"><p className="font-semibold text-gray-900">{material.title}</p><p className="mt-1 text-sm text-gray-600 break-words">{material.description || 'No description provided.'}</p><p className="mt-1 text-xs text-blue-600 break-all">{material.content_url || 'No URL attached.'}</p><p className="mt-1 text-xs text-gray-500">Class: {material.class_id ? (classes.find((item) => item.id === material.class_id)?.name ?? 'Class-only') : 'All students'}</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setEditingMaterialId(material.id); setTitle(material.title); setDescription(material.description ?? ''); setContentUrl(material.content_url ?? ''); setSelectedMaterialClassId(material.class_id ?? ''); setTagText((material.tags ?? []).join(', ')); setActiveSection('materials-form'); }} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200">Edit</button><button type="button" onClick={() => void handleDeleteMaterial(material.id)} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-700 disabled:bg-rose-400" disabled={deletingMaterialId === material.id}>{deletingMaterialId === material.id ? (<><InlineSpinner size={12} />Deleting...</>) : 'Delete'}</button></div></div></div>))}</div>
             )}
           </article>
         );

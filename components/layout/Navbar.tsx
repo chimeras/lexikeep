@@ -68,12 +68,24 @@ export function Navbar() {
 
           <nav className="hidden items-center gap-1 md:flex">
             {isAdminArea ? (
-              <Link
-                href="/admin/dashboard"
-                className="rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white"
-              >
-                Admin Dashboard
-              </Link>
+              <div className="flex items-center gap-1">
+                <Link
+                  href="/admin/dashboard"
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive('/admin/dashboard') ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href="/admin/classes"
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive('/admin/classes') ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Classes
+                </Link>
+              </div>
             ) : (
               studentNavItems.map((item) => {
                 const active = isActive(item.href);
@@ -154,6 +166,11 @@ export function Navbar() {
             {canAccessTeacher && (
               <Link href="/admin/dashboard" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Teacher Dashboard
+              </Link>
+            )}
+            {canAccessTeacher && (
+              <Link href="/admin/classes" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Manage Classes
               </Link>
             )}
             <button

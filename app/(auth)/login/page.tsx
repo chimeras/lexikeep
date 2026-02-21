@@ -39,7 +39,7 @@ export default function LoginPage() {
           email.split('@')[0];
         const { data: createdProfile, error: profileError } = await upsertProfile(userId, fallbackUsername, 'student');
         if (profileError) {
-          setErrorMessage(profileError.message);
+          setErrorMessage(profileError.message ?? 'Unable to create your profile.');
           return;
         }
         profile = createdProfile;

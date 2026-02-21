@@ -32,7 +32,7 @@ export default function RegisterPage() {
         if (data.session) {
           const { error: profileError } = await upsertProfile(data.user.id, username, 'student');
           if (profileError) {
-            setErrorMessage(profileError.message);
+            setErrorMessage(profileError.message ?? 'Unable to create your profile.');
             return;
           }
         }

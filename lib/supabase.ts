@@ -70,19 +70,37 @@ export const signInWithGoogle = async (redirectTo: string) => {
 };
 
 export const upsertProfile = async (userId: string, username: string, role: AppRole = 'student') => {
-  const { data, error } = await supabase
-    .from('profiles')
-    .upsert(
-      {
-        id: userId,
-        username,
-        role,
-      },
-      { onConflict: 'id' },
-    )
-    .select()
-    .single();
-  return { data: data as Profile | null, error };
+  const baseUsername = username.trim() || `student-${userId.slice(0, 8)}`;
+  const usernameCandidates = [baseUsername, `${baseUsername}-${userId.slice(0, 6)}`];
+
+  let lastError: unknown = null;
+  for (const candidate of usernameCandidates) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .upsert(
+        {
+          id: userId,
+          username: candidate,
+          role,
+        },
+        { onConflict: 'id' },
+      )
+      .select()
+      .single();
+
+    if (!error) {
+      return { data: data as Profile | null, error: null };
+    }
+
+    const isUsernameConflict =
+      error.code === '23505' && (error.message ?? '').includes('profiles_username_key');
+    if (!isUsernameConflict) {
+      return { data: null as Profile | null, error };
+    }
+    lastError = error;
+  }
+
+  return { data: null as Profile | null, error: (lastError as { message?: string } | null) ?? null };
 };
 
 export const getProfileById = async (userId: string) => {

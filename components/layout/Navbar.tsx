@@ -11,6 +11,7 @@ import { useAuth } from '@/components/providers/AuthProvider';
 
 const studentNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
+  { href: '/stream', label: 'Stream', icon: UserRound },
   { href: '/materials', label: 'Materials', icon: Layers },
   { href: '/vocabulary', label: 'Vocabulary', icon: BookOpen },
   { href: '/review', label: 'Review', icon: Brain },
@@ -140,6 +141,11 @@ export function Navbar() {
             {!isAdminArea && (
               <Link href="/materials" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Materials
+              </Link>
+            )}
+            {!isAdminArea && (
+              <Link href="/stream" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Stream
               </Link>
             )}
             <Link href="/profile" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">

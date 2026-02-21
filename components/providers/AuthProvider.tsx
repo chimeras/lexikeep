@@ -3,6 +3,7 @@
 import type { Session, User } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useState } from 'react';
 import { getProfileById, signOut, supabase, upsertProfile } from '@/lib/supabase';
+import { publishJoinPostIfMissing } from '@/lib/stream-data';
 import type { Profile } from '@/types';
 
 interface AuthContextValue {
@@ -35,6 +36,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       `student-${targetUser.id.slice(0, 8)}`;
 
     const { data: createdProfile } = await upsertProfile(targetUser.id, fallbackUsername, 'student');
+    if (createdProfile) {
+      await publishJoinPostIfMissing({
+        userId: targetUser.id,
+        username: createdProfile.username ?? fallbackUsername,
+      });
+    }
     return createdProfile;
   };
 

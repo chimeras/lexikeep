@@ -206,3 +206,34 @@ export interface DailyChallengeClaim {
   points_awarded: number;
   created_at: string;
 }
+
+export interface StreamPostLike {
+  id: string;
+  post_id: string;
+  user_id: string;
+  created_at: string;
+}
+
+export interface StreamPostComment {
+  id: string;
+  post_id: string;
+  user_id: string;
+  comment: string;
+  created_at: string;
+  author?: Pick<Profile, 'id' | 'username' | 'avatar_url'> | null;
+}
+
+export interface StreamPost {
+  id: string;
+  author_id: string;
+  body: string;
+  created_at: string;
+  author?: Pick<Profile, 'id' | 'username' | 'avatar_url'> | null;
+  likes?: StreamPostLike[];
+  comments?: StreamPostComment[];
+}
+
+export interface StreamMutedUser {
+  id: string;
+  username: string;
+}

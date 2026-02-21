@@ -4,8 +4,10 @@ import { BookOpen, ImagePlus, Link, Loader2, Sparkles, Upload } from 'lucide-rea
 import { type ChangeEvent, type FormEvent, useState } from 'react';
 import Image from 'next/image';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { useToast } from '@/components/providers/ToastProvider';
 import { syncStudentBadges } from '@/lib/badges-service';
 import { scoreContextUsage, type ContextScoreResult } from '@/lib/context-score';
+import { createStreamPost } from '@/lib/stream-data';
 import { awardStudentPoints, createStudentExpression, createStudentVocabulary } from '@/lib/student-data';
 import { supabase } from '@/lib/supabase';
 import InlineSpinner from '@/components/ui/InlineSpinner';
@@ -18,6 +20,12 @@ interface MicroFeedback {
   question: string;
   options: string[];
   correctAnswer: string;
+}
+
+interface MicroQuestionVariant {
+  question: string;
+  correctAnswer: string;
+  distractors: string[];
 }
 
 const sourceOptions: Array<{ id: SourceType; label: string; icon: typeof Upload }> = [
@@ -33,6 +41,20 @@ interface VocabularyCollectorProps {
 const MICRO_QUIZ_BONUS_POINTS = 3;
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 1280;
+const MICRO_LESSON_DISMISS_DELAY_MS = 1600;
+
+const shuffleOptions = (values: string[]) => {
+  const next = [...values];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const current = next[index];
+    next[index] = next[swapIndex];
+    next[swapIndex] = current;
+  }
+  return next;
+};
+
+const pickRandom = <T,>(values: T[]): T => values[Math.floor(Math.random() * values.length)];
 
 const compressImageFile = async (file: File): Promise<File> => {
   const imageBitmap = await createImageBitmap(file);
@@ -68,32 +90,81 @@ const buildMicroFeedback = (entryType: EntryType, term: string, definition: stri
   const titleCaseTerm = cleanTerm.length > 0 ? cleanTerm : 'this term';
 
   if (entryType === 'word') {
+    const variants: MicroQuestionVariant[] = [
+      {
+        question: `Which sentence uses "${titleCaseTerm}" more naturally?`,
+        correctAnswer: `I used "${titleCaseTerm}" in a full sentence related to ${category.toLowerCase()}.`,
+        distractors: [
+          `I memorize "${titleCaseTerm}" only, no context needed.`,
+          `"${titleCaseTerm}" is useful only in dictionaries.`,
+        ],
+      },
+      {
+        question: `Best next step to remember "${titleCaseTerm}"?`,
+        correctAnswer: `Write one realistic sentence using "${titleCaseTerm}" and review it tomorrow.`,
+        distractors: [
+          `Repeat "${titleCaseTerm}" 20 times without context.`,
+          `Ignore "${titleCaseTerm}" until next month.`,
+        ],
+      },
+      {
+        question: `What helps you master "${titleCaseTerm}" fastest?`,
+        correctAnswer: `Use "${titleCaseTerm}" in speaking and writing within the same day.`,
+        distractors: [
+          `Translate "${titleCaseTerm}" once and never use it.`,
+          `Only look at "${titleCaseTerm}" in a word list.`,
+        ],
+      },
+    ];
+    const selected = pickRandom(variants);
+
     return {
       tip: `Learning tip: Use "${titleCaseTerm}" with a category-specific collocation. In ${category.toLowerCase()}, precise pairings improve fluency.`,
-      question: `Which sentence uses "${titleCaseTerm}" more naturally?`,
-      options: [
-        `I memorize "${titleCaseTerm}" only, no context needed.`,
-        `I used "${titleCaseTerm}" in a full sentence related to ${category.toLowerCase()}.`,
-        `"${titleCaseTerm}" is useful only in dictionaries.`,
-      ],
-      correctAnswer: `I used "${titleCaseTerm}" in a full sentence related to ${category.toLowerCase()}.`,
+      question: selected.question,
+      options: shuffleOptions([selected.correctAnswer, ...selected.distractors]),
+      correctAnswer: selected.correctAnswer,
     };
   }
 
+  const variants: MicroQuestionVariant[] = [
+    {
+      question: `What is the best way to study "${titleCaseTerm}" next?`,
+      correctAnswer: `Use "${titleCaseTerm}" in one spoken and one written context.`,
+      distractors: [
+        `Repeat "${titleCaseTerm}" without context five times.`,
+        `Avoid linking "${titleCaseTerm}" to real situations.`,
+      ],
+    },
+    {
+      question: `How should you practice the expression "${titleCaseTerm}"?`,
+      correctAnswer: `Match "${titleCaseTerm}" to the right tone and situation in a short dialogue.`,
+      distractors: [
+        `Use "${titleCaseTerm}" in random sentences with no meaning.`,
+        `Memorize only a direct translation and stop there.`,
+      ],
+    },
+    {
+      question: `Which approach builds retention for "${titleCaseTerm}"?`,
+      correctAnswer: `Create a mini scenario where "${titleCaseTerm}" sounds natural.`,
+      distractors: [
+        `Study "${titleCaseTerm}" in isolation only.`,
+        `Skip context and focus only on spelling.`,
+      ],
+    },
+  ];
+  const selected = pickRandom(variants);
+
   return {
     tip: `Learning tip: For expressions, match tone and situation. Keep "${titleCaseTerm}" in realistic context, not isolated translation.`,
-    question: `What is the best way to study "${titleCaseTerm}" next?`,
-    options: [
-      `Use "${titleCaseTerm}" in one spoken and one written context.`,
-      `Repeat "${titleCaseTerm}" without context five times.`,
-      `Avoid linking "${titleCaseTerm}" to real situations.`,
-    ],
-    correctAnswer: `Use "${titleCaseTerm}" in one spoken and one written context.`,
+    question: selected.question,
+    options: shuffleOptions([selected.correctAnswer, ...selected.distractors]),
+    correctAnswer: selected.correctAnswer,
   };
 };
 
 export default function VocabularyCollector({ onSaved }: VocabularyCollectorProps) {
   const { profile, user, refreshProfile } = useAuth();
+  const { showToast } = useToast();
   const [sourceType, setSourceType] = useState<SourceType>('material');
   const [entryType, setEntryType] = useState<EntryType>('word');
   const [term, setTerm] = useState('');
@@ -265,10 +336,17 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
     const savedDefinition = definition;
     const savedCategory = category;
     const savedType = entryType;
+    let baseAwardedPoints = 0;
+    let uniquenessTier: 'unique' | 'near_duplicate' | 'duplicate' = 'unique';
     let dailyHookBonusPoints = 0;
 
     if (entryType === 'word') {
-      const { error, dailyHookBonusPoints: hookBonus } = await createStudentVocabulary({
+      const {
+        error,
+        dailyHookBonusPoints: hookBonus,
+        baseAwardedPoints: basePoints,
+        uniquenessTier: returnedTier,
+      } = await createStudentVocabulary({
         studentId,
         word: term,
         definition,
@@ -281,9 +359,11 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
         setIsSubmitting(false);
         return;
       }
+      baseAwardedPoints = basePoints ?? 0;
+      uniquenessTier = returnedTier ?? 'unique';
       dailyHookBonusPoints = hookBonus ?? 0;
     } else {
-      const { error } = await createStudentExpression({
+      const { error, baseAwardedPoints: basePoints, uniquenessTier: returnedTier } = await createStudentExpression({
         studentId,
         expression: term,
         meaning: definition,
@@ -295,19 +375,42 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
         setIsSubmitting(false);
         return;
       }
+      baseAwardedPoints = basePoints ?? 0;
+      uniquenessTier = returnedTier ?? 'unique';
     }
 
-    setStatusMessage(
+    const uniquenessNote =
+      uniquenessTier === 'duplicate'
+        ? ' Duplicate found in community, so base points were not awarded.'
+        : uniquenessTier === 'near_duplicate'
+          ? ` Similar entry found, so points were reduced (+${baseAwardedPoints}).`
+          : ` +${baseAwardedPoints} points awarded.`;
+
+    setStatusMessage(null);
+    const toastMessage =
       savedType === 'word'
-        ? `Word saved to your profile.${dailyHookBonusPoints > 0 ? ` Daily Hook matched (+${dailyHookBonusPoints} bonus points).` : ''}`
-        : 'Expression saved to your profile.',
-    );
+        ? `Word saved.${uniquenessTier === 'duplicate' ? ' +0 base points.' : ` +${baseAwardedPoints} base points.`}${
+            dailyHookBonusPoints > 0 ? ` +${dailyHookBonusPoints} bonus points.` : ''
+          }`
+        : `Expression saved.${uniquenessTier === 'duplicate' ? ' +0 base points.' : ` +${baseAwardedPoints} base points.`}`;
+    showToast(toastMessage, 'success');
     setMicroFeedback(buildMicroFeedback(savedType, savedTerm, savedDefinition, savedCategory));
     const contextResult = scoreContextUsage(savedTerm, exampleSentence);
     setContextScore(contextResult);
     if (contextResult.bonusPoints > 0) {
       await awardStudentPoints(studentId, contextResult.bonusPoints);
     }
+
+    const streamBody =
+      savedType === 'word'
+        ? `Added a new vocabulary word: "${savedTerm.trim()}".`
+        : `Added a new expression: "${savedTerm.trim()}".`;
+    const streamResult = await createStreamPost({ authorId: studentId, body: streamBody });
+    if (streamResult.error) {
+      setErrorMessage(`Saved, but stream post failed: ${streamResult.error.message}`);
+      showToast(`Saved, but stream post failed: ${streamResult.error.message}`, 'error');
+    }
+
     setTerm('');
     setDefinition('');
     setExampleSentence('');
@@ -344,6 +447,12 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
       }
       setIsAwardingBonus(false);
     }
+
+    window.setTimeout(() => {
+      setMicroFeedback(null);
+      setSelectedOption(null);
+      setQuizResult(null);
+    }, MICRO_LESSON_DISMISS_DELAY_MS);
   };
 
   return (

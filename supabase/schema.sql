@@ -1,4 +1,5 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID REFERENCES auth.users PRIMARY KEY,
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS materials (
 CREATE TABLE IF NOT EXISTS vocabulary (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   word TEXT NOT NULL,
+  normalized_word TEXT,
   definition TEXT NOT NULL,
   example_sentence TEXT,
   image_url TEXT,
@@ -38,6 +40,7 @@ CREATE TABLE IF NOT EXISTS vocabulary (
 CREATE TABLE IF NOT EXISTS expressions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   expression TEXT NOT NULL,
+  normalized_expression TEXT,
   meaning TEXT NOT NULL,
   context TEXT,
   student_id UUID REFERENCES profiles(id),
@@ -219,6 +222,94 @@ CREATE TABLE IF NOT EXISTS daily_challenge_claims (
   UNIQUE(challenge_id, student_id)
 );
 
+CREATE TABLE IF NOT EXISTS stream_posts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  author_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  body TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 280),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS stream_post_likes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  post_id UUID NOT NULL REFERENCES stream_posts(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(post_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS stream_post_comments (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  post_id UUID NOT NULL REFERENCES stream_posts(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  comment TEXT NOT NULL CHECK (char_length(comment) BETWEEN 1 AND 280),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS stream_user_mutes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  muted_user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(user_id, muted_user_id),
+  CHECK (user_id <> muted_user_id)
+);
+
+ALTER TABLE vocabulary
+  ADD COLUMN IF NOT EXISTS normalized_word TEXT;
+
+ALTER TABLE expressions
+  ADD COLUMN IF NOT EXISTS normalized_expression TEXT;
+
+CREATE OR REPLACE FUNCTION normalize_lexikeep_text(input_text TEXT)
+RETURNS TEXT AS $$
+BEGIN
+  RETURN trim(
+    regexp_replace(
+      regexp_replace(lower(coalesce(input_text, '')), '[^a-z0-9\s]', ' ', 'g'),
+      '\s+',
+      ' ',
+      'g'
+    )
+  );
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION set_vocabulary_normalized_word()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.normalized_word = normalize_lexikeep_text(NEW.word);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_set_vocabulary_normalized_word ON vocabulary;
+CREATE TRIGGER trg_set_vocabulary_normalized_word
+BEFORE INSERT OR UPDATE OF word ON vocabulary
+FOR EACH ROW
+EXECUTE FUNCTION set_vocabulary_normalized_word();
+
+CREATE OR REPLACE FUNCTION set_expression_normalized_expression()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.normalized_expression = normalize_lexikeep_text(NEW.expression);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_set_expression_normalized_expression ON expressions;
+CREATE TRIGGER trg_set_expression_normalized_expression
+BEFORE INSERT OR UPDATE OF expression ON expressions
+FOR EACH ROW
+EXECUTE FUNCTION set_expression_normalized_expression();
+
+UPDATE vocabulary
+SET normalized_word = normalize_lexikeep_text(word)
+WHERE normalized_word IS NULL OR normalized_word = '';
+
+UPDATE expressions
+SET normalized_expression = normalize_lexikeep_text(expression)
+WHERE normalized_expression IS NULL OR normalized_expression = '';
+
 CREATE INDEX IF NOT EXISTS duels_status_created_idx ON duels(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS duel_participants_student_idx ON duel_participants(student_id);
 CREATE INDEX IF NOT EXISTS duel_rounds_duel_round_idx ON duel_rounds(duel_id, round_number);
@@ -228,6 +319,15 @@ CREATE INDEX IF NOT EXISTS team_memberships_team_idx ON team_memberships(team_id
 CREATE INDEX IF NOT EXISTS team_memberships_student_idx ON team_memberships(student_id);
 CREATE INDEX IF NOT EXISTS teacher_boosts_active_window_idx ON teacher_boosts(is_active, starts_at, ends_at);
 CREATE INDEX IF NOT EXISTS daily_challenge_claims_student_idx ON daily_challenge_claims(student_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS stream_posts_created_idx ON stream_posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS stream_post_likes_post_idx ON stream_post_likes(post_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS stream_post_comments_post_idx ON stream_post_comments(post_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS stream_user_mutes_user_idx ON stream_user_mutes(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS stream_user_mutes_muted_idx ON stream_user_mutes(muted_user_id);
+CREATE INDEX IF NOT EXISTS vocabulary_normalized_word_idx ON vocabulary(normalized_word);
+CREATE INDEX IF NOT EXISTS vocabulary_normalized_word_trgm_idx ON vocabulary USING gin (normalized_word gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS expressions_normalized_expression_idx ON expressions(normalized_expression);
+CREATE INDEX IF NOT EXISTS expressions_normalized_expression_trgm_idx ON expressions USING gin (normalized_expression gin_trgm_ops);
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE materials ENABLE ROW LEVEL SECURITY;
@@ -246,6 +346,10 @@ ALTER TABLE teams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE team_memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE teacher_boosts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_challenge_claims ENABLE ROW LEVEL SECURITY;
+ALTER TABLE stream_posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE stream_post_likes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE stream_post_comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE stream_user_mutes ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "profiles_select_authenticated" ON profiles;
 CREATE POLICY "profiles_select_authenticated" ON profiles
@@ -572,3 +676,72 @@ DROP POLICY IF EXISTS "daily_challenge_claims_insert_own" ON daily_challenge_cla
 CREATE POLICY "daily_challenge_claims_insert_own" ON daily_challenge_claims
   FOR INSERT
   WITH CHECK (student_id = auth.uid());
+
+DROP POLICY IF EXISTS "stream_posts_select_authenticated" ON stream_posts;
+DROP POLICY IF EXISTS "stream_posts_select_authenticated_not_muted" ON stream_posts;
+CREATE POLICY "stream_posts_select_authenticated_not_muted" ON stream_posts
+  FOR SELECT
+  USING (
+    auth.uid() IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM stream_user_mutes m
+      WHERE m.user_id = auth.uid()
+        AND m.muted_user_id = stream_posts.author_id
+    )
+  );
+
+DROP POLICY IF EXISTS "stream_posts_insert_own" ON stream_posts;
+CREATE POLICY "stream_posts_insert_own" ON stream_posts
+  FOR INSERT
+  WITH CHECK (author_id = auth.uid());
+
+DROP POLICY IF EXISTS "stream_posts_delete_own" ON stream_posts;
+CREATE POLICY "stream_posts_delete_own" ON stream_posts
+  FOR DELETE
+  USING (author_id = auth.uid());
+
+DROP POLICY IF EXISTS "stream_post_likes_select_authenticated" ON stream_post_likes;
+CREATE POLICY "stream_post_likes_select_authenticated" ON stream_post_likes
+  FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "stream_post_likes_insert_own" ON stream_post_likes;
+CREATE POLICY "stream_post_likes_insert_own" ON stream_post_likes
+  FOR INSERT
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "stream_post_likes_delete_own" ON stream_post_likes;
+CREATE POLICY "stream_post_likes_delete_own" ON stream_post_likes
+  FOR DELETE
+  USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "stream_post_comments_select_authenticated" ON stream_post_comments;
+CREATE POLICY "stream_post_comments_select_authenticated" ON stream_post_comments
+  FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "stream_post_comments_insert_own" ON stream_post_comments;
+CREATE POLICY "stream_post_comments_insert_own" ON stream_post_comments
+  FOR INSERT
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "stream_post_comments_delete_own" ON stream_post_comments;
+CREATE POLICY "stream_post_comments_delete_own" ON stream_post_comments
+  FOR DELETE
+  USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "stream_user_mutes_select_own" ON stream_user_mutes;
+CREATE POLICY "stream_user_mutes_select_own" ON stream_user_mutes
+  FOR SELECT
+  USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "stream_user_mutes_insert_own" ON stream_user_mutes;
+CREATE POLICY "stream_user_mutes_insert_own" ON stream_user_mutes
+  FOR INSERT
+  WITH CHECK (user_id = auth.uid() AND user_id <> muted_user_id);
+
+DROP POLICY IF EXISTS "stream_user_mutes_delete_own" ON stream_user_mutes;
+CREATE POLICY "stream_user_mutes_delete_own" ON stream_user_mutes
+  FOR DELETE
+  USING (user_id = auth.uid());

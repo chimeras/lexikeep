@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import StatsCard from '@/components/dashboard/StatsCard';
 import { getLevelInfo } from '@/lib/levels';
 import { useAuth } from '@/components/providers/AuthProvider';
-import { updateProfileAvatar } from '@/lib/supabase';
+import { updateProfileAvatar, updateProfileUsername } from '@/lib/supabase';
 import { getStudentMetrics, type StudentMetrics } from '@/lib/student-data';
 import InlineSpinner from '@/components/ui/InlineSpinner';
 
@@ -27,12 +27,18 @@ export default function ProfilePage() {
   const { profile, refreshProfile } = useAuth();
   const [metrics, setMetrics] = useState<StudentMetrics>(emptyMetrics);
   const [selectedAvatar, setSelectedAvatar] = useState<string | null | undefined>(undefined);
+  const [username, setUsername] = useState('');
+  const [savingUsername, setSavingUsername] = useState(false);
   const [savingAvatar, setSavingAvatar] = useState(false);
   const [avatarMessage, setAvatarMessage] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [failedPreferredAvatars, setFailedPreferredAvatars] = useState<Record<string, boolean>>({});
   const level = getLevelInfo(metrics.points);
   const activeAvatar = selectedAvatar === undefined ? (profile?.avatar_url ?? null) : selectedAvatar;
+
+  useEffect(() => {
+    setUsername(profile?.username ?? '');
+  }, [profile?.username]);
 
   useEffect(() => {
     if (!profile?.id) {
@@ -62,6 +68,22 @@ export default function ProfilePage() {
     setSavingAvatar(false);
   };
 
+  const handleSaveUsername = async () => {
+    if (!profile?.id) return;
+    setSavingUsername(true);
+    setAvatarMessage(null);
+    setAvatarError(null);
+    const { error } = await updateProfileUsername(profile.id, username);
+    if (error) {
+      setAvatarError(error.message);
+      setSavingUsername(false);
+      return;
+    }
+    await refreshProfile();
+    setAvatarMessage('Username updated.');
+    setSavingUsername(false);
+  };
+
   return (
     <section className="mx-auto max-w-6xl px-4 py-5 md:px-6 md:py-8">
       <h1 className="text-2xl font-bold text-gray-900 md:text-3xl">Profile</h1>
@@ -84,6 +106,36 @@ export default function ProfilePage() {
         <p className="mt-2 text-xs font-semibold text-blue-700">
           {level.pointsToNext === null ? 'You reached max level.' : `${level.pointsToNext} points to Level ${level.level + 1}`}
         </p>
+      </article>
+
+      <article className="mt-5 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:mt-6 md:p-6">
+        <h2 className="text-xl font-semibold text-gray-900">Username</h2>
+        <p className="mt-1 text-sm text-gray-600">Choose how your name appears in lists and stream.</p>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input
+            type="text"
+            maxLength={32}
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            placeholder="Your username"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm sm:max-w-sm"
+          />
+          <button
+            type="button"
+            onClick={() => void handleSaveUsername()}
+            disabled={savingUsername || username.trim().length < 2}
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:bg-blue-400"
+          >
+            {savingUsername ? (
+              <>
+                <InlineSpinner size={16} />
+                Saving...
+              </>
+            ) : (
+              'Save Username'
+            )}
+          </button>
+        </div>
       </article>
 
       <article className="mt-5 rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:mt-6 md:p-6">

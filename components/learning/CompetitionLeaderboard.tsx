@@ -1,6 +1,7 @@
 'use client';
 
 import { Target, TrendingUp, Trophy } from 'lucide-react';
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { getCompetitionLeaderboard, type LeaderboardEntry } from '@/lib/competition-data';
@@ -76,6 +77,20 @@ export default function CompetitionLeaderboard() {
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
+                    {student.avatar_url ? (
+                      <Image
+                        src={student.avatar_url}
+                        alt={student.username}
+                        width={24}
+                        height={24}
+                        sizes="24px"
+                        className="h-6 w-6 rounded-full object-cover"
+                      />
+                    ) : (
+                      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-700">
+                        {(student.username?.trim().charAt(0) || 'S').toUpperCase()}
+                      </span>
+                    )}
                     <h3 className="truncate font-semibold text-gray-900">{student.username}</h3>
                     <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-700">
                       L{level.level}

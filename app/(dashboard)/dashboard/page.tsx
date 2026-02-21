@@ -29,6 +29,9 @@ const emptyMetrics: StudentMetrics = {
 
 export default function DashboardPage() {
   const { profile } = useAuth();
+  const [reloadKey, setReloadKey] = useState(0);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<StudentMetrics>(emptyMetrics);
   const [badges, setBadges] = useState<StudentBadge[]>([]);
   const [dailyChallenge, setDailyChallenge] = useState<DailyChallenge | null>(null);
@@ -78,41 +81,74 @@ export default function DashboardPage() {
       return;
     }
     const loadDashboardData = async () => {
-      const nextMetrics = await getStudentMetrics(profile.id);
-      const [challenge, quests, dueCountResult, completedTodayResult, boostResult] = await Promise.all([
-        getTodayDailyChallenge(),
-        getWeeklyQuestProgress(profile.id, nextMetrics),
-        getDueReviewCount(profile.id),
-        getReviewsCompletedTodayCount(profile.id),
-        getActiveBoost(),
-      ]);
-      const badgeSync = await syncStudentBadges(profile.id, nextMetrics);
-      const metricsWithBadgeRewards =
-        badgeSync.unlockedBadges.length > 0 ? await getStudentMetrics(profile.id) : nextMetrics;
-      const currentLevelInfo = getLevelInfo(metricsWithBadgeRewards.points);
-      if (typeof window !== 'undefined') {
-        const key = `lexikeep:last_level:${profile.id}`;
-        const previousLevelRaw = window.localStorage.getItem(key);
-        const previousLevel = previousLevelRaw ? Number(previousLevelRaw) : null;
-        if (previousLevel !== null && currentLevelInfo.level > previousLevel) {
-          setLevelUpInfo({ level: currentLevelInfo.level, title: currentLevelInfo.title });
+      setDashboardLoading(true);
+      setDashboardError(null);
+      try {
+        const nextMetrics = await getStudentMetrics(profile.id);
+        const [challenge, quests, dueCountResult, completedTodayResult, boostResult] = await Promise.all([
+          getTodayDailyChallenge(),
+          getWeeklyQuestProgress(profile.id, nextMetrics),
+          getDueReviewCount(profile.id),
+          getReviewsCompletedTodayCount(profile.id),
+          getActiveBoost(),
+        ]);
+        const badgeSync = await syncStudentBadges(profile.id, nextMetrics);
+        const metricsWithBadgeRewards =
+          badgeSync.unlockedBadges.length > 0 ? await getStudentMetrics(profile.id) : nextMetrics;
+        const currentLevelInfo = getLevelInfo(metricsWithBadgeRewards.points);
+        if (typeof window !== 'undefined') {
+          const key = `lexikeep:last_level:${profile.id}`;
+          const previousLevelRaw = window.localStorage.getItem(key);
+          const previousLevel = previousLevelRaw ? Number(previousLevelRaw) : null;
+          if (previousLevel !== null && currentLevelInfo.level > previousLevel) {
+            setLevelUpInfo({ level: currentLevelInfo.level, title: currentLevelInfo.title });
+          }
+          window.localStorage.setItem(key, String(currentLevelInfo.level));
         }
-        window.localStorage.setItem(key, String(currentLevelInfo.level));
+        setMetrics(metricsWithBadgeRewards);
+        setBadges(badgeSync.badges);
+        setDailyChallenge(challenge);
+        setReviewsDue(dueCountResult.count);
+        setReviewsCompletedToday(completedTodayResult.count);
+        setActiveBoost(boostResult.data);
+        setQuestProgress(
+          badgeSync.unlockedBadges.length > 0
+            ? await getWeeklyQuestProgress(profile.id, metricsWithBadgeRewards)
+            : quests,
+        );
+      } catch {
+        setDashboardError('Could not load dashboard data. Pull to refresh or retry.');
+      } finally {
+        setDashboardLoading(false);
       }
-      setMetrics(metricsWithBadgeRewards);
-      setBadges(badgeSync.badges);
-      setDailyChallenge(challenge);
-      setReviewsDue(dueCountResult.count);
-      setReviewsCompletedToday(completedTodayResult.count);
-      setActiveBoost(boostResult.data);
-      setQuestProgress(
-        badgeSync.unlockedBadges.length > 0
-          ? await getWeeklyQuestProgress(profile.id, metricsWithBadgeRewards)
-          : quests,
-      );
     };
     void loadDashboardData();
-  }, [profile?.id]);
+  }, [profile?.id, reloadKey]);
+
+  if (dashboardLoading) {
+    return (
+      <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-32 pt-5 md:px-6 md:pb-8 md:pt-8">
+        <div className="rounded-2xl bg-white p-4 text-sm text-gray-600 shadow-sm">Loading dashboard...</div>
+      </section>
+    );
+  }
+
+  if (dashboardError) {
+    return (
+      <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-32 pt-5 md:px-6 md:pb-8 md:pt-8">
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          <p>{dashboardError}</p>
+          <button
+            type="button"
+            onClick={() => setReloadKey((current) => current + 1)}
+            className="mt-3 rounded-md bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white"
+          >
+            Retry
+          </button>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="student-shell mx-auto grid max-w-6xl gap-5 px-4 pb-32 pt-5 md:gap-6 md:px-6 md:pb-8 md:pt-8">

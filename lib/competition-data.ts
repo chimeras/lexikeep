@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase';
 export interface LeaderboardEntry {
   id: string;
   username: string;
+  avatar_url: string | null;
   points: number;
   words: number;
   expressions: number;
@@ -18,7 +19,7 @@ export interface LeaderboardResult {
 export const getCompetitionLeaderboard = async (currentUserId?: string): Promise<LeaderboardResult> => {
   const { data: topProfiles, error } = await supabase
     .from('profiles')
-    .select('id,username,points,streak')
+    .select('id,username,avatar_url,points,streak')
     .order('points', { ascending: false })
     .limit(10);
 
@@ -40,6 +41,7 @@ export const getCompetitionLeaderboard = async (currentUserId?: string): Promise
       return {
         id: profile.id,
         username: profile.username ?? 'Student',
+        avatar_url: profile.avatar_url ?? null,
         points: profile.points ?? 0,
         words: wordsRes.count ?? 0,
         expressions: expressionsRes.count ?? 0,

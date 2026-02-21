@@ -207,10 +207,13 @@ export const deleteTeam = async (id: string, teacherId: string) => {
 export const getStudentsForTeams = async () => {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id,username,points,role')
+    .select('id,username,avatar_url,points,role')
     .eq('role', 'student')
     .order('points', { ascending: false });
-  return { data: ((data as Array<Pick<Profile, 'id' | 'username' | 'points' | 'role'>> | null) ?? []), error };
+  return {
+    data: ((data as Array<Pick<Profile, 'id' | 'username' | 'avatar_url' | 'points' | 'role'>> | null) ?? []),
+    error,
+  };
 };
 
 export const getTeamMemberships = async (teamId: string) => {

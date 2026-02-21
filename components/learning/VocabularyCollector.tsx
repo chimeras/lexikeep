@@ -42,6 +42,7 @@ const MICRO_QUIZ_BONUS_POINTS = 3;
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION = 1280;
 const MICRO_LESSON_DISMISS_DELAY_MS = 1600;
+const SAVE_TIMEOUT_MS = 20000;
 
 const shuffleOptions = (values: string[]) => {
   const next = [...values];
@@ -55,6 +56,18 @@ const shuffleOptions = (values: string[]) => {
 };
 
 const pickRandom = <T,>(values: T[]): T => values[Math.floor(Math.random() * values.length)];
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> => {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+};
 
 const compressImageFile = async (file: File): Promise<File> => {
   const imageBitmap = await createImageBitmap(file);
@@ -345,86 +358,99 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
     let uniquenessTier: 'unique' | 'near_duplicate' | 'duplicate' = 'unique';
     let dailyHookBonusPoints = 0;
 
-    if (entryType === 'word') {
-      const {
-        error,
-        dailyHookBonusPoints: hookBonus,
-        baseAwardedPoints: basePoints,
-        uniquenessTier: returnedTier,
-      } = await createStudentVocabulary({
-        studentId,
-        word: term,
-        definition,
-        definitionFr,
-        exampleSentence,
-        category,
-        imageUrl,
-        aiAssisted,
-      });
-      if (error) {
-        setErrorMessage(error.message);
-        setIsSubmitting(false);
-        return;
+    try {
+      if (entryType === 'word') {
+        const {
+          error,
+          dailyHookBonusPoints: hookBonus,
+          baseAwardedPoints: basePoints,
+          uniquenessTier: returnedTier,
+        } = await withTimeout(
+          createStudentVocabulary({
+            studentId,
+            word: term,
+            definition,
+            definitionFr,
+            exampleSentence,
+            category,
+            imageUrl,
+            aiAssisted,
+          }),
+          SAVE_TIMEOUT_MS,
+          'Save request timed out. Please try again.',
+        );
+        if (error) {
+          setErrorMessage(error.message);
+          return;
+        }
+        baseAwardedPoints = basePoints ?? 0;
+        uniquenessTier = returnedTier ?? 'unique';
+        dailyHookBonusPoints = hookBonus ?? 0;
+      } else {
+        const { error, baseAwardedPoints: basePoints, uniquenessTier: returnedTier } = await withTimeout(
+          createStudentExpression({
+            studentId,
+            expression: term,
+            meaning: definition,
+            meaningFr: definitionFr,
+            usageExample: exampleSentence,
+            category,
+            aiAssisted,
+          }),
+          SAVE_TIMEOUT_MS,
+          'Save request timed out. Please try again.',
+        );
+        if (error) {
+          setErrorMessage(error.message);
+          return;
+        }
+        baseAwardedPoints = basePoints ?? 0;
+        uniquenessTier = returnedTier ?? 'unique';
       }
-      baseAwardedPoints = basePoints ?? 0;
-      uniquenessTier = returnedTier ?? 'unique';
-      dailyHookBonusPoints = hookBonus ?? 0;
-    } else {
-      const { error, baseAwardedPoints: basePoints, uniquenessTier: returnedTier } = await createStudentExpression({
-        studentId,
-        expression: term,
-        meaning: definition,
-        meaningFr: definitionFr,
-        usageExample: exampleSentence,
-        category,
-        aiAssisted,
-      });
-      if (error) {
-        setErrorMessage(error.message);
-        setIsSubmitting(false);
-        return;
+
+      setStatusMessage(null);
+      const toastMessage =
+        savedType === 'word'
+          ? `Word saved${aiAssisted ? ' (AI-assisted)' : ''}.${uniquenessTier === 'duplicate' ? ' +0 base points.' : ` +${baseAwardedPoints} base points.`}${
+              dailyHookBonusPoints > 0 ? ` +${dailyHookBonusPoints} bonus points.` : ''
+            }`
+          : `Expression saved${aiAssisted ? ' (AI-assisted)' : ''}.${uniquenessTier === 'duplicate' ? ' +0 base points.' : ` +${baseAwardedPoints} base points.`}`;
+      showToast(toastMessage, 'success');
+      setMicroFeedback(buildMicroFeedback(savedType, savedTerm, savedDefinition, savedCategory));
+      const contextResult = scoreContextUsage(savedTerm, exampleSentence);
+      setContextScore(contextResult);
+      if (contextResult.bonusPoints > 0) {
+        await awardStudentPoints(studentId, contextResult.bonusPoints);
       }
-      baseAwardedPoints = basePoints ?? 0;
-      uniquenessTier = returnedTier ?? 'unique';
-    }
 
-    setStatusMessage(null);
-    const toastMessage =
-      savedType === 'word'
-        ? `Word saved${aiAssisted ? ' (AI-assisted)' : ''}.${uniquenessTier === 'duplicate' ? ' +0 base points.' : ` +${baseAwardedPoints} base points.`}${
-            dailyHookBonusPoints > 0 ? ` +${dailyHookBonusPoints} bonus points.` : ''
-          }`
-        : `Expression saved${aiAssisted ? ' (AI-assisted)' : ''}.${uniquenessTier === 'duplicate' ? ' +0 base points.' : ` +${baseAwardedPoints} base points.`}`;
-    showToast(toastMessage, 'success');
-    setMicroFeedback(buildMicroFeedback(savedType, savedTerm, savedDefinition, savedCategory));
-    const contextResult = scoreContextUsage(savedTerm, exampleSentence);
-    setContextScore(contextResult);
-    if (contextResult.bonusPoints > 0) {
-      await awardStudentPoints(studentId, contextResult.bonusPoints);
-    }
+      const streamBody =
+        savedType === 'word'
+          ? `Added a new vocabulary word: "${savedTerm.trim()}".`
+          : `Added a new expression: "${savedTerm.trim()}".`;
+      const streamResult = await createStreamPost({ authorId: studentId, body: streamBody });
+      if (streamResult.error) {
+        setErrorMessage(`Saved, but stream post failed: ${streamResult.error.message}`);
+        showToast(`Saved, but stream post failed: ${streamResult.error.message}`, 'error');
+      }
 
-    const streamBody =
-      savedType === 'word'
-        ? `Added a new vocabulary word: "${savedTerm.trim()}".`
-        : `Added a new expression: "${savedTerm.trim()}".`;
-    const streamResult = await createStreamPost({ authorId: studentId, body: streamBody });
-    if (streamResult.error) {
-      setErrorMessage(`Saved, but stream post failed: ${streamResult.error.message}`);
-      showToast(`Saved, but stream post failed: ${streamResult.error.message}`, 'error');
+      setTerm('');
+      setDefinition('');
+      setDefinitionFr('');
+      setExampleSentence('');
+      setImageUrl('');
+      setAiAssisted(false);
+      await applyBadgeSync(studentId);
+      await refreshProfile();
+      if (onSaved) {
+        await onSaved();
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not save entry. Please try again.';
+      setErrorMessage(message);
+      showToast(message, 'error');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setTerm('');
-    setDefinition('');
-    setDefinitionFr('');
-    setExampleSentence('');
-    setImageUrl('');
-    setAiAssisted(false);
-    await applyBadgeSync(studentId);
-    await refreshProfile();
-    if (onSaved) {
-      await onSaved();
-    }
-    setIsSubmitting(false);
   };
 
   const handleQuizAnswer = async (option: string) => {

@@ -100,6 +100,20 @@ export const updateProfileAvatar = async (userId: string, avatarUrl: string | nu
   return { data: (data as Profile | null) ?? null, error };
 };
 
+export const updateProfileUsername = async (userId: string, username: string) => {
+  const trimmed = username.trim();
+  if (!trimmed) {
+    return { data: null as Profile | null, error: { message: 'Username cannot be empty.' } };
+  }
+  const { data, error } = await supabase
+    .from('profiles')
+    .update({ username: trimmed })
+    .eq('id', userId)
+    .select()
+    .single();
+  return { data: (data as Profile | null) ?? null, error };
+};
+
 export const signOut = async () => {
   const { error } = await supabase.auth.signOut();
   return { error };

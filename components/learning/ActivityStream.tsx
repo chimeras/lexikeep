@@ -1,6 +1,7 @@
 'use client';
 
 import { RefreshCcw, Send, ThumbsUp } from 'lucide-react';
+import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { createStreamPost, getStreamMutedUsers, getStreamPosts, setStreamUserMuted, toggleStreamLike } from '@/lib/stream-data';
@@ -222,7 +223,18 @@ export default function ActivityStream({ compact = false }: ActivityStreamProps)
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2">
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 text-xs font-bold text-white">
-                      {getAuthorInitial(authorName)}
+                      {post.author?.avatar_url ? (
+                        <Image
+                          src={post.author.avatar_url}
+                          alt={authorName}
+                          width={28}
+                          height={28}
+                          sizes="28px"
+                          className="h-7 w-7 rounded-full object-cover"
+                        />
+                      ) : (
+                        getAuthorInitial(authorName)
+                      )}
                     </div>
                     <p className="truncate text-sm font-semibold text-slate-900">{authorName}</p>
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">

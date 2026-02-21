@@ -25,24 +25,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
 
   const ensureProfile = async (targetUser: User) => {
-    const { data: existingProfile } = await getProfileById(targetUser.id);
-    if (existingProfile) {
-      return existingProfile;
-    }
+    try {
+      const { data: existingProfile } = await getProfileById(targetUser.id);
+      if (existingProfile) {
+        return existingProfile;
+      }
 
-    const fallbackUsername =
-      (typeof targetUser.user_metadata?.username === 'string' && targetUser.user_metadata.username.trim()) ||
-      targetUser.email?.split('@')[0] ||
-      `student-${targetUser.id.slice(0, 8)}`;
+      const fallbackUsername =
+        (typeof targetUser.user_metadata?.username === 'string' && targetUser.user_metadata.username.trim()) ||
+        targetUser.email?.split('@')[0] ||
+        `student-${targetUser.id.slice(0, 8)}`;
 
-    const { data: createdProfile } = await upsertProfile(targetUser.id, fallbackUsername, 'student');
-    if (createdProfile) {
-      await publishJoinPostIfMissing({
-        userId: targetUser.id,
-        username: createdProfile.username ?? fallbackUsername,
-      });
+      const { data: createdProfile } = await upsertProfile(targetUser.id, fallbackUsername, 'student');
+      if (createdProfile) {
+        await publishJoinPostIfMissing({
+          userId: targetUser.id,
+          username: createdProfile.username ?? fallbackUsername,
+        });
+      }
+      return createdProfile;
+    } catch {
+      return null;
     }
-    return createdProfile;
   };
 
   const refreshProfile = async () => {
@@ -58,26 +62,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
 
     const bootstrap = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!mounted) {
-        return;
-      }
-
-      const nextSession = data.session;
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
-
-      if (nextSession?.user) {
-        const profileData = await ensureProfile(nextSession.user);
-        if (mounted) {
-          setProfile(profileData);
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) {
+          return;
         }
-      } else {
-        setProfile(null);
-      }
 
-      if (mounted) {
-        setLoading(false);
+        const nextSession = data.session;
+        setSession(nextSession);
+        setUser(nextSession?.user ?? null);
+
+        if (nextSession?.user) {
+          const profileData = await ensureProfile(nextSession.user);
+          if (mounted) {
+            setProfile(profileData);
+          }
+        } else {
+          setProfile(null);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -86,23 +92,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
-      if (!mounted) {
-        return;
-      }
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
-
-      if (nextSession?.user) {
-        const profileData = await ensureProfile(nextSession.user);
-        if (mounted) {
-          setProfile(profileData);
+      try {
+        if (!mounted) {
+          return;
         }
-      } else {
-        setProfile(null);
-      }
+        setSession(nextSession);
+        setUser(nextSession?.user ?? null);
 
-      if (mounted) {
-        setLoading(false);
+        if (nextSession?.user) {
+          const profileData = await ensureProfile(nextSession.user);
+          if (mounted) {
+            setProfile(profileData);
+          }
+        } else {
+          setProfile(null);
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
     });
 

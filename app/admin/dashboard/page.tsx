@@ -85,7 +85,7 @@ export default function AdminDashboardPage() {
   const [quests, setQuests] = useState<Quest[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [boosts, setBoosts] = useState<TeacherBoost[]>([]);
-  const [students, setStudents] = useState<Array<Pick<Profile, 'id' | 'username' | 'points' | 'role'>>>([]);
+  const [students, setStudents] = useState<Array<Pick<Profile, 'id' | 'username' | 'avatar_url' | 'points' | 'role'>>>([]);
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [selectedStudentStreak, setSelectedStudentStreak] = useState(0);
   const [selectedStudentWordCount, setSelectedStudentWordCount] = useState(0);
@@ -927,9 +927,25 @@ export default function AdminDashboardPage() {
                     const student = students.find((item) => item.id === member.student_id);
                     return (
                       <div key={member.id} className="flex flex-col gap-2 rounded-lg border border-gray-200 p-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-gray-900">{student?.username ?? member.student_id.slice(0, 8)}</p>
-                          <p className="text-xs text-gray-600">{member.role} | {student?.points ?? 0} pts</p>
+                        <div className="flex min-w-0 items-center gap-2">
+                          {student?.avatar_url ? (
+                            <Image
+                              src={student.avatar_url}
+                              alt={student.username ?? 'Student'}
+                              width={28}
+                              height={28}
+                              sizes="28px"
+                              className="h-7 w-7 rounded-full object-cover"
+                            />
+                          ) : (
+                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-700">
+                              {((student?.username ?? member.student_id).charAt(0) || 'S').toUpperCase()}
+                            </span>
+                          )}
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-gray-900">{student?.username ?? member.student_id.slice(0, 8)}</p>
+                            <p className="text-xs text-gray-600">{member.role} | {student?.points ?? 0} pts</p>
+                          </div>
                         </div>
                         <button type="button" onClick={() => void handleRemoveMember(member.student_id)} className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-3 py-1.5 text-xs text-white disabled:bg-rose-400" disabled={removingMemberStudentId === member.student_id}>{removingMemberStudentId === member.student_id ? (<><InlineSpinner size={12} />Removing...</>) : 'Remove'}</button>
                       </div>
@@ -974,6 +990,28 @@ export default function AdminDashboardPage() {
 
             {selectedStudentId && (
               <>
+                <div className="mt-4 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+                  {(() => {
+                    const selected = students.find((student) => student.id === selectedStudentId);
+                    return selected?.avatar_url ? (
+                      <Image
+                        src={selected.avatar_url}
+                        alt={selected.username ?? 'Student'}
+                        width={28}
+                        height={28}
+                        sizes="28px"
+                        className="h-7 w-7 rounded-full object-cover"
+                      />
+                    ) : (
+                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-700">
+                        {((selected?.username ?? selectedStudentId).charAt(0) || 'S').toUpperCase()}
+                      </span>
+                    );
+                  })()}
+                  <p className="text-sm font-semibold text-gray-800">
+                    {students.find((student) => student.id === selectedStudentId)?.username ?? selectedStudentId.slice(0, 8)}
+                  </p>
+                </div>
                 <div className="mt-4 grid gap-3 rounded-lg border border-gray-200 p-3 sm:grid-cols-2 lg:grid-cols-[1fr_220px_180px_auto_auto_auto] lg:items-end">
                   <div>
                     <label className="mb-1 block text-sm font-medium text-gray-700">Search</label>

@@ -128,7 +128,53 @@ export default function DashboardPage() {
   if (dashboardLoading) {
     return (
       <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-32 pt-5 md:px-6 md:pb-8 md:pt-8">
-        <div className="rounded-2xl bg-white p-4 text-sm text-gray-600 shadow-sm">Loading dashboard...</div>
+        <div className="relative overflow-hidden rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
+          <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-blue-100/60 blur-2xl" />
+          <div className="absolute -bottom-20 -left-16 h-44 w-44 rounded-full bg-cyan-100/70 blur-2xl" />
+
+          <div className="relative flex flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:justify-start sm:text-left">
+            <svg
+              viewBox="0 0 120 120"
+              className="h-20 w-20 shrink-0"
+              role="img"
+              aria-label="Loading dashboard"
+            >
+              <defs>
+                <linearGradient id="dashLoaderRing" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#2563eb" />
+                  <stop offset="100%" stopColor="#06b6d4" />
+                </linearGradient>
+              </defs>
+              <circle cx="60" cy="60" r="44" fill="none" stroke="#dbeafe" strokeWidth="10" />
+              <circle
+                cx="60"
+                cy="60"
+                r="44"
+                fill="none"
+                stroke="url(#dashLoaderRing)"
+                strokeWidth="10"
+                strokeLinecap="round"
+                strokeDasharray="160 120"
+                className="origin-center animate-spin"
+              />
+              <g className="animate-pulse">
+                <circle cx="60" cy="44" r="5" fill="#2563eb" />
+                <circle cx="44" cy="66" r="5" fill="#06b6d4" />
+                <circle cx="76" cy="66" r="5" fill="#38bdf8" />
+              </g>
+            </svg>
+
+            <div>
+              <p className="text-base font-semibold text-slate-900">Preparing your dashboard</p>
+              <p className="mt-1 text-sm text-slate-600">
+                Loading progress, quests, and leaderboard data...
+              </p>
+              <div className="mt-3 h-2 w-56 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-blue-600 to-cyan-500" />
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
     );
   }

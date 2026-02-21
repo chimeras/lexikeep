@@ -71,17 +71,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const nextSession = data.session;
         setSession(nextSession);
         setUser(nextSession?.user ?? null);
+        setLoading(false);
 
         if (nextSession?.user) {
-          const profileData = await ensureProfile(nextSession.user);
-          if (mounted) {
-            setProfile(profileData);
-          }
+          void ensureProfile(nextSession.user).then((profileData) => {
+            if (mounted) {
+              setProfile(profileData);
+            }
+          });
         } else {
           setProfile(null);
         }
-      } finally {
+      } catch {
         if (mounted) {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
           setLoading(false);
         }
       }
@@ -92,25 +97,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
-      try {
-        if (!mounted) {
-          return;
-        }
-        setSession(nextSession);
-        setUser(nextSession?.user ?? null);
+      if (!mounted) {
+        return;
+      }
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+      setLoading(false);
 
-        if (nextSession?.user) {
-          const profileData = await ensureProfile(nextSession.user);
+      if (nextSession?.user) {
+        void ensureProfile(nextSession.user).then((profileData) => {
           if (mounted) {
             setProfile(profileData);
           }
-        } else {
-          setProfile(null);
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
+        });
+      } else {
+        setProfile(null);
       }
     });
 

@@ -28,7 +28,7 @@ const mobileNavItems = [
 export function Navbar() {
   const router = useRouter();
   const pathname = usePathname();
-  const { profile, loading, logout, isAuthenticated } = useAuth();
+  const { profile, user, loading, logout, isAuthenticated } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
   const isAdminArea = pathname.startsWith('/admin');
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
@@ -39,10 +39,25 @@ export function Navbar() {
     setMoreOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+    const publicPaths = ['/', '/login', '/register', '/auth/callback'];
+    const isPublicPath = publicPaths.includes(pathname);
+    if (!isPublicPath && !user) {
+      router.replace('/login');
+    }
+  }, [loading, pathname, router, user]);
+
   const handleLogout = async () => {
     await logout();
     router.replace('/login');
   };
+
+  if (loading || !isAuthenticated) {
+    return null;
+  }
 
   return (
     <>

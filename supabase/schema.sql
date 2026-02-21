@@ -449,15 +449,7 @@ CREATE POLICY "materials_teacher_manage" ON materials
 DROP POLICY IF EXISTS "classes_select_members_or_teacher" ON classes;
 CREATE POLICY "classes_select_members_or_teacher" ON classes
   FOR SELECT
-  USING (
-    teacher_id = auth.uid()
-    OR EXISTS (
-      SELECT 1
-      FROM class_memberships cm
-      WHERE cm.class_id = classes.id
-        AND cm.student_id = auth.uid()
-    )
-  );
+  USING (teacher_id = auth.uid());
 
 DROP POLICY IF EXISTS "classes_teacher_manage" ON classes;
 CREATE POLICY "classes_teacher_manage" ON classes

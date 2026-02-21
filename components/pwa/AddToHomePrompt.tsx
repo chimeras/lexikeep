@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -11,23 +11,32 @@ const DISMISSED_KEY = 'lexikeep_a2hs_dismissed';
 
 export default function AddToHomePrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [dismissed, setDismissed] = useState(true);
+  const [dismissed, setDismissed] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [isIos, setIsIos] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const dismissedRef = useRef(false);
+  const standaloneRef = useRef(false);
 
   useEffect(() => {
     const hidden = window.localStorage.getItem(DISMISSED_KEY) === '1';
     setDismissed(hidden);
+    dismissedRef.current = hidden;
     setIsIos(/iPad|iPhone|iPod/.test(window.navigator.userAgent));
-    setIsStandalone(window.matchMedia('(display-mode: standalone)').matches || (window.navigator as Navigator & { standalone?: boolean }).standalone === true);
+    const runningStandalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+    setIsStandalone(runningStandalone);
+    standaloneRef.current = runningStandalone;
   }, []);
 
   useEffect(() => {
     const onBeforeInstallPrompt = (event: Event) => {
+      if (dismissedRef.current || standaloneRef.current) {
+        return;
+      }
       event.preventDefault();
       setDeferredPrompt(event as BeforeInstallPromptEvent);
-      setDismissed(false);
     };
 
     window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt);
@@ -44,6 +53,8 @@ export default function AddToHomePrompt() {
   const dismiss = () => {
     window.localStorage.setItem(DISMISSED_KEY, '1');
     setDismissed(true);
+    dismissedRef.current = true;
+    setDeferredPrompt(null);
   };
 
   const install = async () => {

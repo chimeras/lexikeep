@@ -24,7 +24,8 @@ const avatarOptions = Array.from({ length: 8 }, (_, index) => ({
 }));
 
 export default function ProfilePage() {
-  const { profile, refreshProfile } = useAuth();
+  const { profile, user, loading: authLoading, refreshProfile } = useAuth();
+  const studentId = profile?.id ?? user?.id ?? null;
   const [metrics, setMetrics] = useState<StudentMetrics>(emptyMetrics);
   const [selectedAvatar, setSelectedAvatar] = useState<string | null | undefined>(undefined);
   const [username, setUsername] = useState('');
@@ -41,23 +42,26 @@ export default function ProfilePage() {
   }, [profile?.username]);
 
   useEffect(() => {
-    if (!profile?.id) {
+    if (authLoading) {
+      return;
+    }
+    if (!studentId) {
       return;
     }
 
     const loadMetrics = async () => {
-      const nextMetrics = await getStudentMetrics(profile.id);
+      const nextMetrics = await getStudentMetrics(studentId);
       setMetrics(nextMetrics);
     };
     void loadMetrics();
-  }, [profile?.id]);
+  }, [studentId, authLoading]);
 
   const handleSaveAvatar = async () => {
-    if (!profile?.id) return;
+    if (!studentId) return;
     setSavingAvatar(true);
     setAvatarMessage(null);
     setAvatarError(null);
-    const { error } = await updateProfileAvatar(profile.id, activeAvatar);
+    const { error } = await updateProfileAvatar(studentId, activeAvatar);
     if (error) {
       setAvatarError(error.message);
       setSavingAvatar(false);
@@ -69,11 +73,11 @@ export default function ProfilePage() {
   };
 
   const handleSaveUsername = async () => {
-    if (!profile?.id) return;
+    if (!studentId) return;
     setSavingUsername(true);
     setAvatarMessage(null);
     setAvatarError(null);
-    const { error } = await updateProfileUsername(profile.id, username);
+    const { error } = await updateProfileUsername(studentId, username);
     if (error) {
       setAvatarError(error.message);
       setSavingUsername(false);

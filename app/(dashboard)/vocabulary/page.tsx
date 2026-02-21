@@ -8,18 +8,22 @@ import { getStudentVocabulary } from '@/lib/student-data';
 import type { Vocabulary } from '@/types';
 
 export default function VocabularyPage() {
-  const { profile } = useAuth();
+  const { profile, user, loading: authLoading } = useAuth();
+  const studentId = profile?.id ?? user?.id ?? null;
   const [vocabularyItems, setVocabularyItems] = useState<Vocabulary[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadVocabulary = async () => {
-    if (!profile?.id) {
+    if (authLoading) {
+      return;
+    }
+    if (!studentId) {
       setVocabularyItems([]);
       setLoading(false);
       return;
     }
     setLoading(true);
-    const { data } = await getStudentVocabulary(profile.id);
+    const { data } = await getStudentVocabulary(studentId);
     setVocabularyItems(data);
     setLoading(false);
   };
@@ -27,7 +31,7 @@ export default function VocabularyPage() {
   useEffect(() => {
     void loadVocabulary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.id]);
+  }, [studentId, authLoading]);
 
   return (
     <section className="mx-auto grid max-w-6xl gap-5 px-4 py-5 md:gap-6 md:px-6 md:py-8">

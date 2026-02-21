@@ -9,7 +9,8 @@ import type { ReviewItem, StudentBadge } from '@/types';
 import InlineSpinner from '@/components/ui/InlineSpinner';
 
 export default function ReviewPage() {
-  const { profile, refreshProfile } = useAuth();
+  const { profile, user, loading: authLoading, refreshProfile } = useAuth();
+  const studentId = profile?.id ?? user?.id ?? null;
   const [loading, setLoading] = useState(true);
   const [queue, setQueue] = useState<ReviewItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -19,13 +20,16 @@ export default function ReviewPage() {
   const current = useMemo(() => queue[0] ?? null, [queue]);
 
   const loadQueue = async () => {
-    if (!profile?.id) {
+    if (authLoading) {
+      return;
+    }
+    if (!studentId) {
       setQueue([]);
       setLoading(false);
       return;
     }
     setLoading(true);
-    const { data } = await getDueReviewItems(profile.id, 30);
+    const { data } = await getDueReviewItems(studentId, 30);
     setQueue(data);
     setLoading(false);
   };
@@ -33,21 +37,21 @@ export default function ReviewPage() {
   useEffect(() => {
     void loadQueue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.id]);
+  }, [studentId, authLoading]);
 
   useEffect(() => {
     setIsFlipped(false);
   }, [current?.id]);
 
   const onRate = async (rating: 'easy' | 'hard') => {
-    if (!profile?.id || !current || submitting) {
+    if (!studentId || !current || submitting) {
       return;
     }
     setSubmitting(true);
     setFeedback(null);
     setBadgeMessage(null);
 
-    const { error, unlockedBadges } = await submitReviewRating(profile.id, current, rating);
+    const { error, unlockedBadges } = await submitReviewRating(studentId, current, rating);
     if (error) {
       setFeedback(error.message);
       setSubmitting(false);

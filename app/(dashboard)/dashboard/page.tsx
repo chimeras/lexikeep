@@ -28,7 +28,8 @@ const emptyMetrics: StudentMetrics = {
 };
 
 export default function DashboardPage() {
-  const { profile } = useAuth();
+  const { profile, user, loading: authLoading } = useAuth();
+  const studentId = profile?.id ?? user?.id ?? null;
   const [reloadKey, setReloadKey] = useState(0);
   const [dashboardLoading, setDashboardLoading] = useState(true);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
@@ -77,27 +78,33 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    if (!profile?.id) {
+    if (authLoading) {
       return;
     }
+    if (!studentId) {
+      setDashboardLoading(false);
+      setDashboardError('Session not ready. Please reload the page.');
+      return;
+    }
+
     const loadDashboardData = async () => {
       setDashboardLoading(true);
       setDashboardError(null);
       try {
-        const nextMetrics = await getStudentMetrics(profile.id);
+        const nextMetrics = await getStudentMetrics(studentId);
         const [challenge, quests, dueCountResult, completedTodayResult, boostResult] = await Promise.all([
           getTodayDailyChallenge(),
-          getWeeklyQuestProgress(profile.id, nextMetrics),
-          getDueReviewCount(profile.id),
-          getReviewsCompletedTodayCount(profile.id),
+          getWeeklyQuestProgress(studentId, nextMetrics),
+          getDueReviewCount(studentId),
+          getReviewsCompletedTodayCount(studentId),
           getActiveBoost(),
         ]);
-        const badgeSync = await syncStudentBadges(profile.id, nextMetrics);
+        const badgeSync = await syncStudentBadges(studentId, nextMetrics);
         const metricsWithBadgeRewards =
-          badgeSync.unlockedBadges.length > 0 ? await getStudentMetrics(profile.id) : nextMetrics;
+          badgeSync.unlockedBadges.length > 0 ? await getStudentMetrics(studentId) : nextMetrics;
         const currentLevelInfo = getLevelInfo(metricsWithBadgeRewards.points);
         if (typeof window !== 'undefined') {
-          const key = `lexikeep:last_level:${profile.id}`;
+          const key = `lexikeep:last_level:${studentId}`;
           const previousLevelRaw = window.localStorage.getItem(key);
           const previousLevel = previousLevelRaw ? Number(previousLevelRaw) : null;
           if (previousLevel !== null && currentLevelInfo.level > previousLevel) {
@@ -113,7 +120,7 @@ export default function DashboardPage() {
         setActiveBoost(boostResult.data);
         setQuestProgress(
           badgeSync.unlockedBadges.length > 0
-            ? await getWeeklyQuestProgress(profile.id, metricsWithBadgeRewards)
+            ? await getWeeklyQuestProgress(studentId, metricsWithBadgeRewards)
             : quests,
         );
       } catch {
@@ -123,7 +130,7 @@ export default function DashboardPage() {
       }
     };
     void loadDashboardData();
-  }, [profile?.id, reloadKey]);
+  }, [studentId, reloadKey, authLoading]);
 
   if (dashboardLoading) {
     return (

@@ -1,4 +1,5 @@
 import { Inter } from 'next/font/google';
+import type { Metadata } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/components/providers/AuthProvider';
 import ToastProvider from '@/components/providers/ToastProvider';
@@ -6,6 +7,10 @@ import { Navbar } from '@/components/layout/Navbar';
 import AddToHomePrompt from '@/components/pwa/AddToHomePrompt';
 
 const inter = Inter({ subsets: ['latin'] });
+
+export const metadata: Metadata = {
+  manifest: '/manifest.webmanifest',
+};
 
 export default function RootLayout({
   children,

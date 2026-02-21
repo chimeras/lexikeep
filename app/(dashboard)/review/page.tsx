@@ -81,7 +81,30 @@ export default function ReviewPage() {
       </div>
 
       {loading ? (
-        <div className="rounded-xl bg-white p-4 text-sm text-gray-600 shadow-sm">Loading your review queue...</div>
+        <div className="relative overflow-hidden rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm md:p-5">
+          <div className="absolute -right-12 -top-10 h-28 w-28 rounded-full bg-indigo-100/70 blur-2xl" />
+          <div className="absolute -bottom-14 -left-10 h-32 w-32 rounded-full bg-cyan-100/70 blur-2xl" />
+          <div className="relative flex items-center gap-3">
+            <svg viewBox="0 0 64 64" className="h-12 w-12 shrink-0">
+              <circle cx="32" cy="32" r="22" fill="none" stroke="#e0e7ff" strokeWidth="6" />
+              <circle
+                cx="32"
+                cy="32"
+                r="22"
+                fill="none"
+                stroke="#4f46e5"
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeDasharray="72 72"
+                className="origin-center animate-spin"
+              />
+            </svg>
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Loading your review queue</p>
+              <p className="text-xs text-slate-600">Preparing due cards and repetition schedule...</p>
+            </div>
+          </div>
+        </div>
       ) : !current ? (
         <div className="rounded-2xl border border-emerald-100 bg-white p-6 text-center shadow-sm">
           <CheckCircle2 className="mx-auto text-emerald-600" size={28} />

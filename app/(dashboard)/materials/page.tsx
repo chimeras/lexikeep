@@ -23,8 +23,29 @@ export default function MaterialsPage() {
       <p className="mt-1 text-sm text-gray-600 md:text-base">Choose a source and collect new vocabulary from it.</p>
 
       {loading ? (
-        <div className="mt-5 rounded-xl bg-white p-4 text-sm text-gray-600 shadow-sm ring-1 ring-gray-200">
-          Loading learning materials...
+        <div className="relative mt-5 overflow-hidden rounded-2xl border border-blue-100 bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-5">
+          <div className="absolute -right-12 -top-12 h-28 w-28 rounded-full bg-blue-100/70 blur-2xl" />
+          <div className="absolute -bottom-14 -left-10 h-32 w-32 rounded-full bg-cyan-100/70 blur-2xl" />
+          <div className="relative flex items-center gap-3">
+            <svg viewBox="0 0 64 64" className="h-12 w-12 shrink-0">
+              <circle cx="32" cy="32" r="22" fill="none" stroke="#dbeafe" strokeWidth="6" />
+              <circle
+                cx="32"
+                cy="32"
+                r="22"
+                fill="none"
+                stroke="#2563eb"
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeDasharray="72 72"
+                className="origin-center animate-spin"
+              />
+            </svg>
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Loading learning materials</p>
+              <p className="text-xs text-slate-600">Fetching global and class resources...</p>
+            </div>
+          </div>
         </div>
       ) : materials.length === 0 ? (
         <div className="mt-5 rounded-xl bg-white p-4 text-sm text-gray-600 shadow-sm ring-1 ring-gray-200">

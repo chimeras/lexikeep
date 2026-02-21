@@ -39,7 +39,30 @@ export default function VocabularyPage() {
       <VocabularyCollector onSaved={loadVocabulary} />
 
       {loading ? (
-        <div className="rounded-xl bg-white p-4 text-sm text-gray-600 shadow-sm">Loading your vocabulary...</div>
+        <div className="relative overflow-hidden rounded-2xl border border-blue-100 bg-white p-4 shadow-sm md:p-5">
+          <div className="absolute -right-12 -top-12 h-28 w-28 rounded-full bg-blue-100/70 blur-2xl" />
+          <div className="absolute -bottom-14 -left-10 h-32 w-32 rounded-full bg-cyan-100/70 blur-2xl" />
+          <div className="relative flex items-center gap-3">
+            <svg viewBox="0 0 64 64" className="h-12 w-12 shrink-0">
+              <circle cx="32" cy="32" r="22" fill="none" stroke="#dbeafe" strokeWidth="6" />
+              <circle
+                cx="32"
+                cy="32"
+                r="22"
+                fill="none"
+                stroke="#0284c7"
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeDasharray="72 72"
+                className="origin-center animate-spin"
+              />
+            </svg>
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Loading your vocabulary</p>
+              <p className="text-xs text-slate-600">Syncing words, expressions, and mastery state...</p>
+            </div>
+          </div>
+        </div>
       ) : vocabularyItems.length === 0 ? (
         <div className="rounded-xl bg-white p-4 text-sm text-gray-600 shadow-sm">
           No vocabulary saved yet. Add your first word or expression above.

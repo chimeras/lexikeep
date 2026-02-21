@@ -26,10 +26,13 @@ CREATE TABLE IF NOT EXISTS vocabulary (
   word TEXT NOT NULL,
   normalized_word TEXT,
   definition TEXT NOT NULL,
+  definition_fr TEXT,
   example_sentence TEXT,
   image_url TEXT,
   student_id UUID REFERENCES profiles(id),
   material_id UUID REFERENCES materials(id),
+  ai_assisted BOOLEAN NOT NULL DEFAULT FALSE,
+  ai_provider TEXT,
   difficulty TEXT DEFAULT 'medium',
   category TEXT,
   tags TEXT[],
@@ -42,9 +45,12 @@ CREATE TABLE IF NOT EXISTS expressions (
   expression TEXT NOT NULL,
   normalized_expression TEXT,
   meaning TEXT NOT NULL,
+  meaning_fr TEXT,
   context TEXT,
   student_id UUID REFERENCES profiles(id),
   material_id UUID REFERENCES materials(id),
+  ai_assisted BOOLEAN NOT NULL DEFAULT FALSE,
+  ai_provider TEXT,
   usage_example TEXT,
   created_at TIMESTAMP DEFAULT NOW()
 );
@@ -256,9 +262,21 @@ CREATE TABLE IF NOT EXISTS stream_user_mutes (
 
 ALTER TABLE vocabulary
   ADD COLUMN IF NOT EXISTS normalized_word TEXT;
+ALTER TABLE vocabulary
+  ADD COLUMN IF NOT EXISTS definition_fr TEXT;
+ALTER TABLE vocabulary
+  ADD COLUMN IF NOT EXISTS ai_assisted BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE vocabulary
+  ADD COLUMN IF NOT EXISTS ai_provider TEXT;
 
 ALTER TABLE expressions
   ADD COLUMN IF NOT EXISTS normalized_expression TEXT;
+ALTER TABLE expressions
+  ADD COLUMN IF NOT EXISTS meaning_fr TEXT;
+ALTER TABLE expressions
+  ADD COLUMN IF NOT EXISTS ai_assisted BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE expressions
+  ADD COLUMN IF NOT EXISTS ai_provider TEXT;
 
 CREATE OR REPLACE FUNCTION normalize_lexikeep_text(input_text TEXT)
 RETURNS TEXT AS $$

@@ -22,10 +22,13 @@ export interface Vocabulary {
   id: string;
   word: string;
   definition: string;
+  definition_fr: string | null;
   example_sentence: string | null;
   image_url: string | null;
   student_id: string | null;
   material_id: string | null;
+  ai_assisted: boolean;
+  ai_provider: string | null;
   difficulty: 'easy' | 'medium' | 'hard';
   category: string | null;
   tags: string[];
@@ -37,9 +40,12 @@ export interface Expression {
   id: string;
   expression: string;
   meaning: string;
+  meaning_fr: string | null;
   context: string | null;
   student_id: string | null;
   material_id: string | null;
+  ai_assisted: boolean;
+  ai_provider: string | null;
   usage_example: string | null;
   created_at: string;
 }

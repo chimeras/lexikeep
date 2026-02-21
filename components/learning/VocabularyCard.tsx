@@ -7,18 +7,22 @@ import Image from 'next/image';
 interface VocabularyCardProps {
   word: string;
   definition: string;
+  definitionFr?: string | null;
   example: string;
   category: string;
   difficulty: 'easy' | 'medium' | 'hard';
+  aiAssisted?: boolean;
   imageUrl?: string | null;
 }
 
 export default function VocabularyCard({ 
   word, 
   definition, 
+  definitionFr,
   example, 
   category,
   difficulty,
+  aiAssisted,
   imageUrl,
 }: VocabularyCardProps) {
   const [isBookmarked, setIsBookmarked] = useState(false);
@@ -45,9 +49,16 @@ export default function VocabularyCard({
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h3 className="text-xl font-bold text-gray-900 md:text-2xl">{word}</h3>
-          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${difficultyColors[difficulty]}`}>
-            {difficulty}
-          </span>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <span className={`rounded-full px-3 py-1 text-xs font-semibold ${difficultyColors[difficulty]}`}>
+              {difficulty}
+            </span>
+            {aiAssisted && (
+              <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
+                AI-assisted
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex shrink-0 gap-2">
           <button
@@ -70,6 +81,11 @@ export default function VocabularyCard({
           <div className="relative mb-3 h-40 overflow-hidden rounded-lg border border-gray-200">
             <Image src={imageUrl} alt={word} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
           </div>
+        )}
+        {definitionFr && (
+          <p className="mb-1 rounded-md bg-blue-50 px-2 py-1 text-sm text-blue-800 md:text-base">
+            FR: {definitionFr}
+          </p>
         )}
         <p className="mb-2 text-sm text-gray-700 md:text-base">{definition}</p>
         <p className="text-gray-600 italic">&quot;{example}&quot;</p>

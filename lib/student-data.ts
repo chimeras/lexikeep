@@ -23,6 +23,7 @@ const UNIQUENESS_NEAR_DUPLICATE_THRESHOLD = 0.86;
 const UNIQUENESS_NEAR_DUPLICATE_MULTIPLIER = 0.5;
 const UNIQUENESS_SCAN_LIMIT = 1500;
 const DB_UNDEFINED_COLUMN_CODE = '42703';
+const AI_ASSISTED_BASE_POINTS_MULTIPLIER = 0.6;
 
 export const incrementStudentPoints = async (studentId: string, delta: number) => {
   const { data: profile, error: readError } = await supabase
@@ -359,28 +360,35 @@ interface NewVocabularyInput {
   studentId: string;
   word: string;
   definition: string;
+  definitionFr?: string;
   exampleSentence: string;
   category?: string;
   imageUrl?: string;
+  aiAssisted?: boolean;
 }
 
 export const createStudentVocabulary = async ({
   studentId,
   word,
   definition,
+  definitionFr,
   exampleSentence,
   category,
   imageUrl,
+  aiAssisted,
 }: NewVocabularyInput) => {
   const { data, error } = await supabase
     .from('vocabulary')
     .insert({
       word,
       definition,
+      definition_fr: definitionFr?.trim() || null,
       example_sentence: exampleSentence,
       image_url: imageUrl?.trim() || null,
       category: category || null,
       student_id: studentId,
+      ai_assisted: Boolean(aiAssisted),
+      ai_provider: aiAssisted ? 'ollama' : null,
       difficulty: 'medium',
       status: 'learning',
       tags: [],
@@ -401,13 +409,14 @@ export const createStudentVocabulary = async ({
     contextHint: data.example_sentence ?? undefined,
   });
 
+  const basePoints = aiAssisted ? Math.max(1, Math.round(10 * AI_ASSISTED_BASE_POINTS_MULTIPLIER)) : 10;
   const uniquenessResult = await evaluateEntryUniqueness({
     table: 'vocabulary',
     normalizedColumn: 'normalized_word',
     valueColumn: 'word',
     studentId,
     rawValue: data.word,
-    basePoints: 10,
+    basePoints,
   });
   const baseAwardResult =
     uniquenessResult.basePointsToAward > 0
@@ -440,25 +449,32 @@ interface NewExpressionInput {
   studentId: string;
   expression: string;
   meaning: string;
+  meaningFr?: string;
   usageExample: string;
   category?: string;
+  aiAssisted?: boolean;
 }
 
 export const createStudentExpression = async ({
   studentId,
   expression,
   meaning,
+  meaningFr,
   usageExample,
   category,
+  aiAssisted,
 }: NewExpressionInput) => {
   const { data, error } = await supabase
     .from('expressions')
     .insert({
       expression,
       meaning,
+      meaning_fr: meaningFr?.trim() || null,
       usage_example: usageExample,
       context: category || null,
       student_id: studentId,
+      ai_assisted: Boolean(aiAssisted),
+      ai_provider: aiAssisted ? 'ollama' : null,
     })
     .select()
     .single();
@@ -476,13 +492,14 @@ export const createStudentExpression = async ({
     contextHint: data.usage_example ?? undefined,
   });
 
+  const basePoints = aiAssisted ? Math.max(1, Math.round(12 * AI_ASSISTED_BASE_POINTS_MULTIPLIER)) : 12;
   const uniquenessResult = await evaluateEntryUniqueness({
     table: 'expressions',
     normalizedColumn: 'normalized_expression',
     valueColumn: 'expression',
     studentId,
     rawValue: data.expression,
-    basePoints: 12,
+    basePoints,
   });
   const baseAwardResult =
     uniquenessResult.basePointsToAward > 0

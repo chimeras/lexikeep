@@ -170,6 +170,7 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
   const [term, setTerm] = useState('');
   const [category, setCategory] = useState('Business');
   const [definition, setDefinition] = useState('');
+  const [definitionFr, setDefinitionFr] = useState('');
   const [exampleSentence, setExampleSentence] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -184,6 +185,7 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
   const [isAwardingBonus, setIsAwardingBonus] = useState(false);
   const [badgeUnlockMessage, setBadgeUnlockMessage] = useState<string | null>(null);
   const [contextScore, setContextScore] = useState<ContextScoreResult | null>(null);
+  const [aiAssisted, setAiAssisted] = useState(false);
 
   const handleGenerateWithLlama = async () => {
     if (!term.trim()) {
@@ -210,6 +212,7 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
 
       const data = (await response.json()) as {
         definition?: string;
+        definitionFr?: string;
         example?: string;
         error?: string;
       };
@@ -219,14 +222,16 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
         return;
       }
 
-      if (!data.definition || !data.example) {
+      if (!data.definition || !data.definitionFr || !data.example) {
         setErrorMessage('Model response was incomplete. Try again.');
         return;
       }
 
       setDefinition(data.definition);
+      setDefinitionFr(data.definitionFr);
       setExampleSentence(data.example);
-      setStatusMessage('Definition and example generated with Llama 3.');
+      setAiAssisted(true);
+      setStatusMessage('English + French definition and example generated with Ollama.');
     } catch {
       setErrorMessage('Could not reach generation service. Check model server and try again.');
     } finally {
@@ -350,9 +355,11 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
         studentId,
         word: term,
         definition,
+        definitionFr,
         exampleSentence,
         category,
         imageUrl,
+        aiAssisted,
       });
       if (error) {
         setErrorMessage(error.message);
@@ -367,8 +374,10 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
         studentId,
         expression: term,
         meaning: definition,
+        meaningFr: definitionFr,
         usageExample: exampleSentence,
         category,
+        aiAssisted,
       });
       if (error) {
         setErrorMessage(error.message);
@@ -379,20 +388,13 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
       uniquenessTier = returnedTier ?? 'unique';
     }
 
-    const uniquenessNote =
-      uniquenessTier === 'duplicate'
-        ? ' Duplicate found in community, so base points were not awarded.'
-        : uniquenessTier === 'near_duplicate'
-          ? ` Similar entry found, so points were reduced (+${baseAwardedPoints}).`
-          : ` +${baseAwardedPoints} points awarded.`;
-
     setStatusMessage(null);
     const toastMessage =
       savedType === 'word'
-        ? `Word saved.${uniquenessTier === 'duplicate' ? ' +0 base points.' : ` +${baseAwardedPoints} base points.`}${
+        ? `Word saved${aiAssisted ? ' (AI-assisted)' : ''}.${uniquenessTier === 'duplicate' ? ' +0 base points.' : ` +${baseAwardedPoints} base points.`}${
             dailyHookBonusPoints > 0 ? ` +${dailyHookBonusPoints} bonus points.` : ''
           }`
-        : `Expression saved.${uniquenessTier === 'duplicate' ? ' +0 base points.' : ` +${baseAwardedPoints} base points.`}`;
+        : `Expression saved${aiAssisted ? ' (AI-assisted)' : ''}.${uniquenessTier === 'duplicate' ? ' +0 base points.' : ` +${baseAwardedPoints} base points.`}`;
     showToast(toastMessage, 'success');
     setMicroFeedback(buildMicroFeedback(savedType, savedTerm, savedDefinition, savedCategory));
     const contextResult = scoreContextUsage(savedTerm, exampleSentence);
@@ -413,8 +415,10 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
 
     setTerm('');
     setDefinition('');
+    setDefinitionFr('');
     setExampleSentence('');
     setImageUrl('');
+    setAiAssisted(false);
     await applyBadgeSync(studentId);
     await refreshProfile();
     if (onSaved) {
@@ -553,8 +557,17 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
             className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {isGenerating ? <InlineSpinner size={16} /> : <Sparkles size={16} />}
-            {isGenerating ? 'Generating...' : 'Generate with Llama 3'}
+            {isGenerating ? 'Generating...' : 'Generate with Ollama'}
           </button>
+          <label className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-slate-600">
+            <input
+              type="checkbox"
+              checked={aiAssisted}
+              onChange={(event) => setAiAssisted(event.target.checked)}
+              className="h-4 w-4 rounded border-slate-300"
+            />
+            This entry used AI assistance (reduced points)
+          </label>
         </div>
 
         <div>
@@ -566,6 +579,17 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
             rows={2}
             placeholder="Clear definition in English..."
             required
+          />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium text-gray-700">Définition en français (optionnel)</label>
+          <textarea
+            value={definitionFr}
+            onChange={(event) => setDefinitionFr(event.target.value)}
+            className="w-full rounded-lg border border-gray-300 p-3"
+            rows={2}
+            placeholder="Définition claire en français..."
           />
         </div>
 

@@ -51,9 +51,11 @@ export default function VocabularyPage() {
               key={item.id}
               word={item.word}
               definition={item.definition}
+              definitionFr={item.definition_fr}
               example={item.example_sentence ?? 'No example sentence yet.'}
               category={item.category ?? 'General'}
               difficulty={(item.difficulty as 'easy' | 'medium' | 'hard') ?? 'medium'}
+              aiAssisted={item.ai_assisted}
               imageUrl={item.image_url}
             />
           ))}

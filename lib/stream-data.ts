@@ -245,3 +245,94 @@ export const publishJoinPostIfMissing = async ({
   });
   return { error };
 };
+
+export interface StreamTermPreview {
+  entryType: 'vocabulary' | 'expression';
+  term: string;
+  definitionOrMeaning: string;
+  exampleOrUsage: string | null;
+  categoryOrContext: string | null;
+}
+
+export const getStreamTermPreview = async ({
+  entryType,
+  term,
+}: {
+  entryType: 'vocabulary' | 'expression';
+  term: string;
+}) => {
+  const normalizedTerm = term.trim();
+  if (!normalizedTerm) {
+    return { data: null as StreamTermPreview | null, error: { message: 'Invalid term.' } };
+  }
+
+  if (entryType === 'vocabulary') {
+    const byNormalized = await supabase
+      .from('vocabulary')
+      .select('word,definition,example_sentence,category')
+      .eq('normalized_word', normalizedTerm.toLowerCase())
+      .eq('moderation_status', 'approved')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const fallback = byNormalized.error?.code === '42703'
+      ? await supabase
+          .from('vocabulary')
+          .select('word,definition,example_sentence,category')
+          .ilike('word', normalizedTerm)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : byNormalized;
+
+    if (fallback.error || !fallback.data) {
+      return { data: null as StreamTermPreview | null, error: fallback.error };
+    }
+
+    return {
+      data: {
+        entryType,
+        term: fallback.data.word,
+        definitionOrMeaning: fallback.data.definition,
+        exampleOrUsage: fallback.data.example_sentence ?? null,
+        categoryOrContext: fallback.data.category ?? null,
+      } satisfies StreamTermPreview,
+      error: null,
+    };
+  }
+
+  const byNormalized = await supabase
+    .from('expressions')
+    .select('expression,meaning,usage_example,context')
+    .eq('normalized_expression', normalizedTerm.toLowerCase())
+    .eq('moderation_status', 'approved')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const fallback = byNormalized.error?.code === '42703'
+    ? await supabase
+        .from('expressions')
+        .select('expression,meaning,usage_example,context')
+        .ilike('expression', normalizedTerm)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : byNormalized;
+
+  if (fallback.error || !fallback.data) {
+    return { data: null as StreamTermPreview | null, error: fallback.error };
+  }
+
+  return {
+    data: {
+      entryType,
+      term: fallback.data.expression,
+      definitionOrMeaning: fallback.data.meaning,
+      exampleOrUsage: fallback.data.usage_example ?? null,
+      categoryOrContext: fallback.data.context ?? null,
+    } satisfies StreamTermPreview,
+    error: null,
+  };
+};

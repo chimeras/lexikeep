@@ -57,6 +57,17 @@ export default function MaterialsPage() {
             <article key={material.id} className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
               <h2 className="text-lg font-semibold text-gray-900">{material.title}</h2>
               <p className="mt-2 text-sm text-gray-600">{material.description ?? 'No description provided yet.'}</p>
+              {material.content_url && (
+                <a
+                  href={material.content_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                  className="mt-3 inline-flex rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
+                >
+                  Download PDF
+                </a>
+              )}
               <div className="mt-4 flex flex-wrap gap-2">
                 {(material.tags ?? []).length > 0 ? (
                   (material.tags ?? []).map((tag) => (

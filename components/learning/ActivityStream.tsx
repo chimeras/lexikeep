@@ -2,16 +2,15 @@
 
 import { RefreshCcw, Send, ThumbsUp } from 'lucide-react';
 import Image from 'next/image';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import {
   createStreamPost,
   getStreamMutedUsers,
   getStreamPosts,
-  getStreamTermPreview,
   setStreamUserMuted,
   toggleStreamLike,
-  type StreamTermPreview,
 } from '@/lib/stream-data';
 import { supabase } from '@/lib/supabase';
 import type { StreamMutedUser, StreamPost } from '@/types';
@@ -44,9 +43,6 @@ export default function ActivityStream({ compact = false }: ActivityStreamProps)
   const [composer, setComposer] = useState('');
   const [mutedUsers, setMutedUsers] = useState<StreamMutedUser[]>([]);
   const [muteTargetId, setMuteTargetId] = useState<string | null>(null);
-  const [termPreview, setTermPreview] = useState<StreamTermPreview | null>(null);
-  const [loadingTermPreview, setLoadingTermPreview] = useState(false);
-  const isModalOpenRef = useRef(false);
 
   const loadMutedUsers = async () => {
     if (!studentId) {
@@ -89,18 +85,12 @@ export default function ActivityStream({ compact = false }: ActivityStreamProps)
   }, [studentId]);
 
   useEffect(() => {
-    isModalOpenRef.current = Boolean(termPreview) || loadingTermPreview;
-  }, [termPreview, loadingTermPreview]);
-
-  useEffect(() => {
     const channel = supabase
       .channel('activity-stream')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stream_posts' }, () => {
-        if (isModalOpenRef.current) return;
         void refreshTop();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stream_post_likes' }, () => {
-        if (isModalOpenRef.current) return;
         void refreshTop();
       })
       .subscribe();
@@ -156,12 +146,6 @@ export default function ActivityStream({ compact = false }: ActivityStreamProps)
     return null;
   };
   const getAuthorInitial = (name: string) => name.trim().charAt(0).toUpperCase() || 'S';
-  const openTermPreview = async ({ entryType, term }: { entryType: 'vocabulary' | 'expression'; term: string }) => {
-    setLoadingTermPreview(true);
-    const { data } = await getStreamTermPreview({ entryType, term });
-    setTermPreview(data);
-    setLoadingTermPreview(false);
-  };
   const handleMuteToggle = async ({ targetId, muted }: { targetId: string; muted: boolean }) => {
     if (!studentId || muteTargetId) return;
     setMuteTargetId(targetId);
@@ -283,13 +267,12 @@ export default function ActivityStream({ compact = false }: ActivityStreamProps)
                   {linkedTerm && (
                     <>
                       {' '}
-                      <button
-                        type="button"
-                        onClick={() => void openTermPreview(linkedTerm)}
+                      <Link
+                        href={`/stream/term?type=${linkedTerm.entryType}&term=${encodeURIComponent(linkedTerm.term)}`}
                         className="font-semibold text-blue-700 underline-offset-2 hover:underline"
                       >
                         View details
-                      </button>
+                      </Link>
                     </>
                   )}
                 </p>
@@ -332,45 +315,6 @@ export default function ActivityStream({ compact = false }: ActivityStreamProps)
           >
             {loadingMore ? 'Loading...' : 'Load more'}
           </button>
-        </div>
-      )}
-
-      {(termPreview || loadingTermPreview) && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-xl md:p-5">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <p className="text-sm font-bold uppercase tracking-wide text-blue-700">
-                {termPreview?.entryType === 'expression' ? 'Expression' : 'Vocabulary'}
-              </p>
-              <button
-                type="button"
-                onClick={() => setTermPreview(null)}
-                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700"
-              >
-                Close
-              </button>
-            </div>
-            {loadingTermPreview ? (
-              <p className="text-sm text-slate-600">Loading details...</p>
-            ) : termPreview ? (
-              <div className="space-y-2">
-                <h3 className="text-xl font-bold text-slate-900">{termPreview.term}</h3>
-                <p className="text-sm text-slate-700">{termPreview.definitionOrMeaning}</p>
-                {termPreview.exampleOrUsage && (
-                  <p className="rounded-lg bg-slate-50 p-2 text-sm italic text-slate-600">
-                    &quot;{termPreview.exampleOrUsage}&quot;
-                  </p>
-                )}
-                {termPreview.categoryOrContext && (
-                  <p className="text-xs font-semibold text-slate-500">
-                    {termPreview.entryType === 'expression' ? 'Context' : 'Category'}: {termPreview.categoryOrContext}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-600">Details not found.</p>
-            )}
-          </div>
         </div>
       )}
     </article>

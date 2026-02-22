@@ -2,7 +2,7 @@
 
 import { RefreshCcw, Send, ThumbsUp } from 'lucide-react';
 import Image from 'next/image';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/components/providers/AuthProvider';
 import {
   createStreamPost,
@@ -46,6 +46,7 @@ export default function ActivityStream({ compact = false }: ActivityStreamProps)
   const [muteTargetId, setMuteTargetId] = useState<string | null>(null);
   const [termPreview, setTermPreview] = useState<StreamTermPreview | null>(null);
   const [loadingTermPreview, setLoadingTermPreview] = useState(false);
+  const isModalOpenRef = useRef(false);
 
   const loadMutedUsers = async () => {
     if (!studentId) {
@@ -88,12 +89,18 @@ export default function ActivityStream({ compact = false }: ActivityStreamProps)
   }, [studentId]);
 
   useEffect(() => {
+    isModalOpenRef.current = Boolean(termPreview) || loadingTermPreview;
+  }, [termPreview, loadingTermPreview]);
+
+  useEffect(() => {
     const channel = supabase
       .channel('activity-stream')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stream_posts' }, () => {
+        if (isModalOpenRef.current) return;
         void refreshTop();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stream_post_likes' }, () => {
+        if (isModalOpenRef.current) return;
         void refreshTop();
       })
       .subscribe();
@@ -102,7 +109,7 @@ export default function ActivityStream({ compact = false }: ActivityStreamProps)
       void supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [posts.length]);
+  }, []);
 
   const handlePost = async () => {
     if (!studentId || posting) return;

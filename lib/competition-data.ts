@@ -34,8 +34,16 @@ export const getCompetitionLeaderboard = async (currentUserId?: string): Promise
   const entries = await Promise.all(
     topProfiles.map(async (profile) => {
       const [wordsRes, expressionsRes] = await Promise.all([
-        supabase.from('vocabulary').select('*', { count: 'exact', head: true }).eq('student_id', profile.id),
-        supabase.from('expressions').select('*', { count: 'exact', head: true }).eq('student_id', profile.id),
+        supabase
+          .from('vocabulary')
+          .select('*', { count: 'exact', head: true })
+          .eq('student_id', profile.id)
+          .eq('moderation_status', 'approved'),
+        supabase
+          .from('expressions')
+          .select('*', { count: 'exact', head: true })
+          .eq('student_id', profile.id)
+          .eq('moderation_status', 'approved'),
       ]);
 
       return {

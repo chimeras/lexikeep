@@ -278,6 +278,21 @@ CREATE TABLE IF NOT EXISTS stream_user_mutes (
   CHECK (user_id <> muted_user_id)
 );
 
+CREATE TABLE IF NOT EXISTS library_resources (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  resource_type TEXT NOT NULL CHECK (resource_type IN ('book', 'article', 'website')),
+  url TEXT NOT NULL,
+  downloadable BOOLEAN NOT NULL DEFAULT FALSE,
+  tags TEXT[],
+  created_by UUID REFERENCES profiles(id),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS requires_moderation BOOLEAN NOT NULL DEFAULT FALSE;
+
 ALTER TABLE vocabulary
   ADD COLUMN IF NOT EXISTS normalized_word TEXT;
 ALTER TABLE vocabulary
@@ -286,6 +301,14 @@ ALTER TABLE vocabulary
   ADD COLUMN IF NOT EXISTS ai_assisted BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE vocabulary
   ADD COLUMN IF NOT EXISTS ai_provider TEXT;
+ALTER TABLE vocabulary
+  ADD COLUMN IF NOT EXISTS moderation_status TEXT NOT NULL DEFAULT 'approved';
+ALTER TABLE vocabulary
+  ADD COLUMN IF NOT EXISTS moderated_at TIMESTAMP;
+ALTER TABLE vocabulary
+  ADD COLUMN IF NOT EXISTS moderated_by UUID REFERENCES profiles(id);
+ALTER TABLE vocabulary
+  ADD COLUMN IF NOT EXISTS moderation_reason TEXT;
 
 ALTER TABLE expressions
   ADD COLUMN IF NOT EXISTS normalized_expression TEXT;
@@ -295,6 +318,14 @@ ALTER TABLE expressions
   ADD COLUMN IF NOT EXISTS ai_assisted BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE expressions
   ADD COLUMN IF NOT EXISTS ai_provider TEXT;
+ALTER TABLE expressions
+  ADD COLUMN IF NOT EXISTS moderation_status TEXT NOT NULL DEFAULT 'approved';
+ALTER TABLE expressions
+  ADD COLUMN IF NOT EXISTS moderated_at TIMESTAMP;
+ALTER TABLE expressions
+  ADD COLUMN IF NOT EXISTS moderated_by UUID REFERENCES profiles(id);
+ALTER TABLE expressions
+  ADD COLUMN IF NOT EXISTS moderation_reason TEXT;
 
 ALTER TABLE materials
   ADD COLUMN IF NOT EXISTS class_id UUID;
@@ -384,6 +415,10 @@ CREATE INDEX IF NOT EXISTS classes_teacher_idx ON classes(teacher_id, created_at
 CREATE INDEX IF NOT EXISTS class_memberships_class_idx ON class_memberships(class_id, joined_at DESC);
 CREATE INDEX IF NOT EXISTS class_memberships_student_idx ON class_memberships(student_id);
 CREATE INDEX IF NOT EXISTS materials_class_id_idx ON materials(class_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS library_resources_created_idx ON library_resources(created_at DESC);
+CREATE INDEX IF NOT EXISTS library_resources_created_by_idx ON library_resources(created_by, created_at DESC);
+CREATE INDEX IF NOT EXISTS vocabulary_moderation_idx ON vocabulary(moderation_status, created_at DESC);
+CREATE INDEX IF NOT EXISTS expressions_moderation_idx ON expressions(moderation_status, created_at DESC);
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE materials ENABLE ROW LEVEL SECURITY;
@@ -408,6 +443,7 @@ ALTER TABLE stream_post_comments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE stream_user_mutes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE classes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE class_memberships ENABLE ROW LEVEL SECURITY;
+ALTER TABLE library_resources ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "profiles_select_authenticated" ON profiles;
 CREATE POLICY "profiles_select_authenticated" ON profiles
@@ -424,6 +460,26 @@ CREATE POLICY "profiles_update_own" ON profiles
   FOR UPDATE
   USING (auth.uid() = id)
   WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "profiles_teacher_moderation_manage" ON profiles;
+CREATE POLICY "profiles_teacher_moderation_manage" ON profiles
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM profiles p
+      WHERE p.id = auth.uid()
+        AND p.role IN ('teacher', 'admin')
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM profiles p
+      WHERE p.id = auth.uid()
+        AND p.role IN ('teacher', 'admin')
+    )
+  );
 
 DROP POLICY IF EXISTS "materials_select_all" ON materials;
 DROP POLICY IF EXISTS "materials_select_accessible" ON materials;
@@ -445,6 +501,17 @@ CREATE POLICY "materials_teacher_manage" ON materials
   FOR ALL
   USING (teacher_id = auth.uid())
   WITH CHECK (teacher_id = auth.uid());
+
+DROP POLICY IF EXISTS "library_resources_select_authenticated" ON library_resources;
+CREATE POLICY "library_resources_select_authenticated" ON library_resources
+  FOR SELECT
+  USING (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "library_resources_teacher_manage" ON library_resources;
+CREATE POLICY "library_resources_teacher_manage" ON library_resources
+  FOR ALL
+  USING (created_by = auth.uid())
+  WITH CHECK (created_by = auth.uid());
 
 DROP POLICY IF EXISTS "classes_select_members_or_teacher" ON classes;
 CREATE POLICY "classes_select_members_or_teacher" ON classes
@@ -510,6 +577,26 @@ CREATE POLICY "vocabulary_update_own" ON vocabulary
   USING (student_id = auth.uid())
   WITH CHECK (student_id = auth.uid());
 
+DROP POLICY IF EXISTS "vocabulary_teacher_moderate" ON vocabulary;
+CREATE POLICY "vocabulary_teacher_moderate" ON vocabulary
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM profiles p
+      WHERE p.id = auth.uid()
+        AND p.role IN ('teacher', 'admin')
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM profiles p
+      WHERE p.id = auth.uid()
+        AND p.role IN ('teacher', 'admin')
+    )
+  );
+
 DROP POLICY IF EXISTS "vocabulary_delete_own" ON vocabulary;
 CREATE POLICY "vocabulary_delete_own" ON vocabulary
   FOR DELETE
@@ -530,6 +617,26 @@ CREATE POLICY "expressions_update_own" ON expressions
   FOR UPDATE
   USING (student_id = auth.uid())
   WITH CHECK (student_id = auth.uid());
+
+DROP POLICY IF EXISTS "expressions_teacher_moderate" ON expressions;
+CREATE POLICY "expressions_teacher_moderate" ON expressions
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM profiles p
+      WHERE p.id = auth.uid()
+        AND p.role IN ('teacher', 'admin')
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM profiles p
+      WHERE p.id = auth.uid()
+        AND p.role IN ('teacher', 'admin')
+    )
+  );
 
 DROP POLICY IF EXISTS "expressions_delete_own" ON expressions;
 CREATE POLICY "expressions_delete_own" ON expressions

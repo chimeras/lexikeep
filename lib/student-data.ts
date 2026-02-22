@@ -24,6 +24,7 @@ const UNIQUENESS_NEAR_DUPLICATE_MULTIPLIER = 0.5;
 const UNIQUENESS_SCAN_LIMIT = 1500;
 const DB_UNDEFINED_COLUMN_CODE = '42703';
 const AI_ASSISTED_BASE_POINTS_MULTIPLIER = 0.6;
+const MISSING_COLUMN_CODE = '42703';
 
 export const incrementStudentPoints = async (studentId: string, delta: number) => {
   const { data: profile, error: readError } = await supabase
@@ -135,41 +136,71 @@ const evaluateEntryUniqueness = async ({
     return { tier: 'unique', basePointsToAward: basePoints };
   }
 
-  const exactMatchResult = await supabase
+  const exactMatchQuery = supabase
     .from(table)
     .select('id', { count: 'exact', head: true })
     .eq(normalizedColumn, normalizedCandidate)
     .neq('student_id', studentId)
+    .eq('moderation_status', 'approved')
     .limit(1);
+  const exactMatchResult = await exactMatchQuery;
+  const exactMatchFallbackResult =
+    exactMatchResult.error?.code === MISSING_COLUMN_CODE
+      ? await supabase
+          .from(table)
+          .select('id', { count: 'exact', head: true })
+          .eq(normalizedColumn, normalizedCandidate)
+          .neq('student_id', studentId)
+          .limit(1)
+      : exactMatchResult;
 
-  if (!exactMatchResult.error && (exactMatchResult.count ?? 0) > 0) {
+  if (!exactMatchFallbackResult.error && (exactMatchFallbackResult.count ?? 0) > 0) {
     return { tier: 'duplicate', basePointsToAward: 0 };
   }
 
-  const useRawFallback = exactMatchResult.error?.code === DB_UNDEFINED_COLUMN_CODE;
+  const useRawFallback = exactMatchFallbackResult.error?.code === DB_UNDEFINED_COLUMN_CODE;
   const candidateQuery = useRawFallback
     ? supabase
         .from(table)
         .select(`${valueColumn}`)
         .neq('student_id', studentId)
+        .eq('moderation_status', 'approved')
         .order('created_at', { ascending: false })
         .limit(UNIQUENESS_SCAN_LIMIT)
     : supabase
         .from(table)
         .select(`${normalizedColumn}`)
         .neq('student_id', studentId)
+        .eq('moderation_status', 'approved')
         .not(normalizedColumn, 'is', null)
         .order('created_at', { ascending: false })
         .limit(UNIQUENESS_SCAN_LIMIT);
 
   const { data, error } = await candidateQuery;
+  const fallbackCandidate =
+    error?.code === MISSING_COLUMN_CODE
+      ? await (useRawFallback
+          ? supabase
+              .from(table)
+              .select(`${valueColumn}`)
+              .neq('student_id', studentId)
+              .order('created_at', { ascending: false })
+              .limit(UNIQUENESS_SCAN_LIMIT)
+          : supabase
+              .from(table)
+              .select(`${normalizedColumn}`)
+              .neq('student_id', studentId)
+              .not(normalizedColumn, 'is', null)
+              .order('created_at', { ascending: false })
+              .limit(UNIQUENESS_SCAN_LIMIT))
+      : { data, error };
 
-  if (error || !data) {
+  if (fallbackCandidate.error || !fallbackCandidate.data) {
     return { tier: 'unique', basePointsToAward: basePoints };
   }
 
   let maxSimilarity = 0;
-  for (const row of data as Array<Record<string, unknown>>) {
+  for (const row of fallbackCandidate.data as Array<Record<string, unknown>>) {
     const rawExisting = useRawFallback ? row[valueColumn] : row[normalizedColumn];
     if (typeof rawExisting !== 'string') {
       continue;
@@ -195,6 +226,26 @@ const evaluateEntryUniqueness = async ({
   }
 
   return { tier: 'unique', basePointsToAward: basePoints };
+};
+
+const getStudentModerationRequirement = async (studentId: string) => {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('requires_moderation')
+    .eq('id', studentId)
+    .maybeSingle();
+
+  if (error?.code === MISSING_COLUMN_CODE) {
+    return { requiresModeration: false, error: null };
+  }
+  if (error) {
+    return { requiresModeration: false, error };
+  }
+
+  return {
+    requiresModeration: Boolean((data as { requires_moderation?: boolean } | null)?.requires_moderation),
+    error: null,
+  };
 };
 
 const buildDailyHookCandidates = (challenge: Pick<DailyChallenge, 'title' | 'description'>) => {
@@ -293,11 +344,20 @@ const claimDailyHookBonus = async ({
 };
 
 export const getStudentMetrics = async (studentId: string): Promise<StudentMetrics> => {
-  const [profileRes, wordsRes, expressionsRes, reviewStreak] = await Promise.all([
+  const [profileRes, wordsResRaw, expressionsResRaw, reviewStreak] = await Promise.all([
     supabase.from('profiles').select('points').eq('id', studentId).maybeSingle(),
-    supabase.from('vocabulary').select('*', { count: 'exact', head: true }).eq('student_id', studentId),
-    supabase.from('expressions').select('*', { count: 'exact', head: true }).eq('student_id', studentId),
+    supabase.from('vocabulary').select('*', { count: 'exact', head: true }).eq('student_id', studentId).eq('moderation_status', 'approved'),
+    supabase.from('expressions').select('*', { count: 'exact', head: true }).eq('student_id', studentId).eq('moderation_status', 'approved'),
     getStudentReviewStreak(studentId),
+  ]);
+
+  const [wordsRes, expressionsRes] = await Promise.all([
+    wordsResRaw.error?.code === MISSING_COLUMN_CODE
+      ? supabase.from('vocabulary').select('*', { count: 'exact', head: true }).eq('student_id', studentId)
+      : Promise.resolve(wordsResRaw),
+    expressionsResRaw.error?.code === MISSING_COLUMN_CODE
+      ? supabase.from('expressions').select('*', { count: 'exact', head: true }).eq('student_id', studentId)
+      : Promise.resolve(expressionsResRaw),
   ]);
 
   const profile = profileRes.data as Pick<Profile, 'points'> | null;
@@ -356,6 +416,112 @@ const ensureReviewItem = async ({
   return { error: null };
 };
 
+const awardForApprovedVocabulary = async ({
+  studentId,
+  vocabularyId,
+  word,
+  definition,
+  exampleSentence,
+  aiAssisted,
+}: {
+  studentId: string;
+  vocabularyId: string;
+  word: string;
+  definition: string;
+  exampleSentence?: string | null;
+  aiAssisted: boolean;
+}) => {
+  await ensureReviewItem({
+    studentId,
+    sourceType: 'vocabulary',
+    sourceId: vocabularyId,
+    prompt: word,
+    answer: definition,
+    contextHint: exampleSentence ?? undefined,
+  });
+
+  const basePoints = aiAssisted ? Math.max(1, Math.round(10 * AI_ASSISTED_BASE_POINTS_MULTIPLIER)) : 10;
+  const uniquenessResult = await evaluateEntryUniqueness({
+    table: 'vocabulary',
+    normalizedColumn: 'normalized_word',
+    valueColumn: 'word',
+    studentId,
+    rawValue: word,
+    basePoints,
+  });
+  const baseAwardResult =
+    uniquenessResult.basePointsToAward > 0
+      ? await awardStudentPoints(studentId, uniquenessResult.basePointsToAward)
+      : { error: null, awardedPoints: 0 };
+  if (baseAwardResult.error) {
+    return { error: baseAwardResult.error, baseAwardedPoints: 0, uniquenessTier: uniquenessResult.tier, dailyHookBonusPoints: 0 };
+  }
+
+  const dailyHookResult = await claimDailyHookBonus({
+    studentId,
+    vocabularyId,
+    word,
+  });
+  if (dailyHookResult.error) {
+    return { error: dailyHookResult.error, baseAwardedPoints: 0, uniquenessTier: uniquenessResult.tier, dailyHookBonusPoints: 0 };
+  }
+
+  return {
+    error: null,
+    baseAwardedPoints: baseAwardResult.awardedPoints ?? 0,
+    uniquenessTier: uniquenessResult.tier,
+    dailyHookBonusPoints: dailyHookResult.bonusPoints,
+  };
+};
+
+const awardForApprovedExpression = async ({
+  studentId,
+  expressionId,
+  expression,
+  meaning,
+  usageExample,
+  aiAssisted,
+}: {
+  studentId: string;
+  expressionId: string;
+  expression: string;
+  meaning: string;
+  usageExample?: string | null;
+  aiAssisted: boolean;
+}) => {
+  await ensureReviewItem({
+    studentId,
+    sourceType: 'expression',
+    sourceId: expressionId,
+    prompt: expression,
+    answer: meaning,
+    contextHint: usageExample ?? undefined,
+  });
+
+  const basePoints = aiAssisted ? Math.max(1, Math.round(12 * AI_ASSISTED_BASE_POINTS_MULTIPLIER)) : 12;
+  const uniquenessResult = await evaluateEntryUniqueness({
+    table: 'expressions',
+    normalizedColumn: 'normalized_expression',
+    valueColumn: 'expression',
+    studentId,
+    rawValue: expression,
+    basePoints,
+  });
+  const baseAwardResult =
+    uniquenessResult.basePointsToAward > 0
+      ? await awardStudentPoints(studentId, uniquenessResult.basePointsToAward)
+      : { error: null, awardedPoints: 0 };
+  if (baseAwardResult.error) {
+    return { error: baseAwardResult.error, baseAwardedPoints: 0, uniquenessTier: uniquenessResult.tier };
+  }
+
+  return {
+    error: null,
+    baseAwardedPoints: baseAwardResult.awardedPoints ?? 0,
+    uniquenessTier: uniquenessResult.tier,
+  };
+};
+
 interface NewVocabularyInput {
   studentId: string;
   word: string;
@@ -377,6 +543,12 @@ export const createStudentVocabulary = async ({
   imageUrl,
   aiAssisted,
 }: NewVocabularyInput) => {
+  const moderationRes = await getStudentModerationRequirement(studentId);
+  if (moderationRes.error) {
+    return { data: null, error: moderationRes.error };
+  }
+  const moderationStatus = moderationRes.requiresModeration ? 'pending' : 'approved';
+
   const { data, error } = await supabase
     .from('vocabulary')
     .insert({
@@ -391,6 +563,7 @@ export const createStudentVocabulary = async ({
       ai_provider: aiAssisted ? 'ollama' : null,
       difficulty: 'medium',
       status: 'learning',
+      moderation_status: moderationStatus,
       tags: [],
     })
     .select()
@@ -400,48 +573,38 @@ export const createStudentVocabulary = async ({
     return { data: null, error };
   }
 
-  await ensureReviewItem({
-    studentId,
-    sourceType: 'vocabulary',
-    sourceId: data.id,
-    prompt: data.word,
-    answer: data.definition,
-    contextHint: data.example_sentence ?? undefined,
-  });
-
-  const basePoints = aiAssisted ? Math.max(1, Math.round(10 * AI_ASSISTED_BASE_POINTS_MULTIPLIER)) : 10;
-  const uniquenessResult = await evaluateEntryUniqueness({
-    table: 'vocabulary',
-    normalizedColumn: 'normalized_word',
-    valueColumn: 'word',
-    studentId,
-    rawValue: data.word,
-    basePoints,
-  });
-  const baseAwardResult =
-    uniquenessResult.basePointsToAward > 0
-      ? await awardStudentPoints(studentId, uniquenessResult.basePointsToAward)
-      : { error: null, awardedPoints: 0 };
-  if (baseAwardResult.error) {
-    return { data: null, error: baseAwardResult.error, dailyHookBonusPoints: 0, dailyHookMatched: false };
+  if (moderationStatus === 'pending') {
+    return {
+      data: data as Vocabulary,
+      error: null,
+      pendingModeration: true,
+      baseAwardedPoints: 0,
+      uniquenessTier: 'unique' as const,
+      dailyHookBonusPoints: 0,
+      dailyHookMatched: false,
+    };
   }
 
-  const dailyHookResult = await claimDailyHookBonus({
+  const awardRes = await awardForApprovedVocabulary({
     studentId,
     vocabularyId: data.id,
-    word,
+    word: data.word,
+    definition: data.definition,
+    exampleSentence: data.example_sentence,
+    aiAssisted: Boolean(aiAssisted),
   });
-  if (dailyHookResult.error) {
-    return { data: null, error: dailyHookResult.error, dailyHookBonusPoints: 0, dailyHookMatched: false };
+  if (awardRes.error) {
+    return { data: null, error: awardRes.error, dailyHookBonusPoints: 0, dailyHookMatched: false };
   }
 
   return {
     data: data as Vocabulary,
     error: null,
-    baseAwardedPoints: baseAwardResult.awardedPoints ?? 0,
-    uniquenessTier: uniquenessResult.tier,
-    dailyHookBonusPoints: dailyHookResult.bonusPoints,
-    dailyHookMatched: dailyHookResult.matched,
+    pendingModeration: false,
+    baseAwardedPoints: awardRes.baseAwardedPoints,
+    uniquenessTier: awardRes.uniquenessTier,
+    dailyHookBonusPoints: awardRes.dailyHookBonusPoints,
+    dailyHookMatched: awardRes.dailyHookBonusPoints > 0,
   };
 };
 
@@ -464,6 +627,12 @@ export const createStudentExpression = async ({
   category,
   aiAssisted,
 }: NewExpressionInput) => {
+  const moderationRes = await getStudentModerationRequirement(studentId);
+  if (moderationRes.error) {
+    return { data: null, error: moderationRes.error };
+  }
+  const moderationStatus = moderationRes.requiresModeration ? 'pending' : 'approved';
+
   const { data, error } = await supabase
     .from('expressions')
     .insert({
@@ -475,6 +644,7 @@ export const createStudentExpression = async ({
       student_id: studentId,
       ai_assisted: Boolean(aiAssisted),
       ai_provider: aiAssisted ? 'ollama' : null,
+      moderation_status: moderationStatus,
     })
     .select()
     .single();
@@ -483,36 +653,163 @@ export const createStudentExpression = async ({
     return { data: null, error };
   }
 
-  await ensureReviewItem({
-    studentId,
-    sourceType: 'expression',
-    sourceId: data.id,
-    prompt: data.expression,
-    answer: data.meaning,
-    contextHint: data.usage_example ?? undefined,
-  });
+  if (moderationStatus === 'pending') {
+    return {
+      data: data as Expression,
+      error: null,
+      pendingModeration: true,
+      baseAwardedPoints: 0,
+      uniquenessTier: 'unique' as const,
+    };
+  }
 
-  const basePoints = aiAssisted ? Math.max(1, Math.round(12 * AI_ASSISTED_BASE_POINTS_MULTIPLIER)) : 12;
-  const uniquenessResult = await evaluateEntryUniqueness({
-    table: 'expressions',
-    normalizedColumn: 'normalized_expression',
-    valueColumn: 'expression',
+  const awardRes = await awardForApprovedExpression({
     studentId,
-    rawValue: data.expression,
-    basePoints,
+    expressionId: data.id,
+    expression: data.expression,
+    meaning: data.meaning,
+    usageExample: data.usage_example,
+    aiAssisted: Boolean(aiAssisted),
   });
-  const baseAwardResult =
-    uniquenessResult.basePointsToAward > 0
-      ? await awardStudentPoints(studentId, uniquenessResult.basePointsToAward)
-      : { error: null, awardedPoints: 0 };
-  if (baseAwardResult.error) {
-    return { data: null, error: baseAwardResult.error };
+  if (awardRes.error) {
+    return { data: null, error: awardRes.error };
   }
 
   return {
     data: data as Expression,
     error: null,
-    baseAwardedPoints: baseAwardResult.awardedPoints ?? 0,
-    uniquenessTier: uniquenessResult.tier,
+    pendingModeration: false,
+    baseAwardedPoints: awardRes.baseAwardedPoints,
+    uniquenessTier: awardRes.uniquenessTier,
   };
+};
+
+export const approveVocabularyEntry = async ({
+  vocabularyId,
+  moderatorId,
+}: {
+  vocabularyId: string;
+  moderatorId: string;
+}) => {
+  const { data, error } = await supabase
+    .from('vocabulary')
+    .update({
+      moderation_status: 'approved',
+      moderated_by: moderatorId,
+      moderated_at: new Date().toISOString(),
+      moderation_reason: null,
+    })
+    .eq('id', vocabularyId)
+    .eq('moderation_status', 'pending')
+    .select('id,student_id,word,definition,example_sentence,ai_assisted')
+    .maybeSingle();
+
+  if (error || !data) {
+    return { error: error ?? { message: 'Entry not found or already moderated.' }, awardedPoints: 0 };
+  }
+
+  const awardRes = await awardForApprovedVocabulary({
+    studentId: data.student_id,
+    vocabularyId: data.id,
+    word: data.word,
+    definition: data.definition,
+    exampleSentence: data.example_sentence,
+    aiAssisted: Boolean(data.ai_assisted),
+  });
+
+  if (awardRes.error) {
+    return { error: awardRes.error, awardedPoints: 0 };
+  }
+
+  return {
+    error: null,
+    awardedPoints: (awardRes.baseAwardedPoints ?? 0) + (awardRes.dailyHookBonusPoints ?? 0),
+  };
+};
+
+export const rejectVocabularyEntry = async ({
+  vocabularyId,
+  moderatorId,
+  reason,
+}: {
+  vocabularyId: string;
+  moderatorId: string;
+  reason?: string;
+}) => {
+  const { error } = await supabase
+    .from('vocabulary')
+    .update({
+      moderation_status: 'rejected',
+      moderated_by: moderatorId,
+      moderated_at: new Date().toISOString(),
+      moderation_reason: reason?.trim() || null,
+    })
+    .eq('id', vocabularyId)
+    .eq('moderation_status', 'pending');
+  return { error };
+};
+
+export const approveExpressionEntry = async ({
+  expressionId,
+  moderatorId,
+}: {
+  expressionId: string;
+  moderatorId: string;
+}) => {
+  const { data, error } = await supabase
+    .from('expressions')
+    .update({
+      moderation_status: 'approved',
+      moderated_by: moderatorId,
+      moderated_at: new Date().toISOString(),
+      moderation_reason: null,
+    })
+    .eq('id', expressionId)
+    .eq('moderation_status', 'pending')
+    .select('id,student_id,expression,meaning,usage_example,ai_assisted')
+    .maybeSingle();
+
+  if (error || !data) {
+    return { error: error ?? { message: 'Entry not found or already moderated.' }, awardedPoints: 0 };
+  }
+
+  const awardRes = await awardForApprovedExpression({
+    studentId: data.student_id,
+    expressionId: data.id,
+    expression: data.expression,
+    meaning: data.meaning,
+    usageExample: data.usage_example,
+    aiAssisted: Boolean(data.ai_assisted),
+  });
+
+  if (awardRes.error) {
+    return { error: awardRes.error, awardedPoints: 0 };
+  }
+
+  return {
+    error: null,
+    awardedPoints: awardRes.baseAwardedPoints ?? 0,
+  };
+};
+
+export const rejectExpressionEntry = async ({
+  expressionId,
+  moderatorId,
+  reason,
+}: {
+  expressionId: string;
+  moderatorId: string;
+  reason?: string;
+}) => {
+  const { error } = await supabase
+    .from('expressions')
+    .update({
+      moderation_status: 'rejected',
+      moderated_by: moderatorId,
+      moderated_at: new Date().toISOString(),
+      moderation_reason: reason?.trim() || null,
+    })
+    .eq('id', expressionId)
+    .eq('moderation_status', 'pending');
+  return { error };
 };

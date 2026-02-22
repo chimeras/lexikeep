@@ -5,6 +5,7 @@ export interface Profile {
   points: number;
   streak: number;
   avatar_url: string | null;
+  requires_moderation: boolean;
   created_at: string;
 }
 
@@ -39,6 +40,7 @@ export interface ClassMembership {
 export interface Vocabulary {
   id: string;
   word: string;
+  normalized_word: string | null;
   definition: string;
   definition_fr: string | null;
   example_sentence: string | null;
@@ -51,12 +53,17 @@ export interface Vocabulary {
   category: string | null;
   tags: string[];
   status: 'new' | 'learning' | 'mastered';
+  moderation_status: 'pending' | 'approved' | 'rejected';
+  moderated_at: string | null;
+  moderated_by: string | null;
+  moderation_reason: string | null;
   created_at: string;
 }
 
 export interface Expression {
   id: string;
   expression: string;
+  normalized_expression: string | null;
   meaning: string;
   meaning_fr: string | null;
   context: string | null;
@@ -65,6 +72,10 @@ export interface Expression {
   ai_assisted: boolean;
   ai_provider: string | null;
   usage_example: string | null;
+  moderation_status: 'pending' | 'approved' | 'rejected';
+  moderated_at: string | null;
+  moderated_by: string | null;
+  moderation_reason: string | null;
   created_at: string;
 }
 
@@ -260,4 +271,18 @@ export interface StreamPost {
 export interface StreamMutedUser {
   id: string;
   username: string;
+}
+
+export type LibraryResourceType = 'book' | 'article' | 'website';
+
+export interface LibraryResource {
+  id: string;
+  title: string;
+  description: string | null;
+  resource_type: LibraryResourceType;
+  url: string;
+  downloadable: boolean;
+  tags: string[] | null;
+  created_by: string | null;
+  created_at: string;
 }

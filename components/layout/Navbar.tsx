@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, Brain, Home, Layers, MoreHorizontal, Trophy, UserRound } from 'lucide-react';
+import { BookOpen, Brain, Home, Layers, Library, MoreHorizontal, Trophy, UserRound } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -13,6 +13,7 @@ const studentNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
   { href: '/stream', label: 'Stream', icon: UserRound },
   { href: '/materials', label: 'Materials', icon: Layers },
+  { href: '/library', label: 'Library', icon: Library },
   { href: '/vocabulary', label: 'Vocabulary', icon: BookOpen },
   { href: '/review', label: 'Review', icon: Brain },
   { href: '/competition', label: 'Competition', icon: Trophy },
@@ -100,6 +101,22 @@ export function Navbar() {
                 >
                   Classes
                 </Link>
+                <Link
+                  href="/admin/library"
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive('/admin/library') ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Library
+                </Link>
+                <Link
+                  href="/admin/moderation"
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive('/admin/moderation') ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Moderation
+                </Link>
               </div>
             ) : (
               studentNavItems.map((item) => {
@@ -171,6 +188,11 @@ export function Navbar() {
               </Link>
             )}
             {!isAdminArea && (
+              <Link href="/library" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Library
+              </Link>
+            )}
+            {!isAdminArea && (
               <Link href="/stream" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Stream
               </Link>
@@ -186,6 +208,16 @@ export function Navbar() {
             {canAccessTeacher && (
               <Link href="/admin/classes" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Manage Classes
+              </Link>
+            )}
+            {canAccessTeacher && (
+              <Link href="/admin/library" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Manage Library
+              </Link>
+            )}
+            {canAccessTeacher && (
+              <Link href="/admin/moderation" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Moderation
               </Link>
             )}
             <button

@@ -357,6 +357,7 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
     let baseAwardedPoints = 0;
     let uniquenessTier: 'unique' | 'near_duplicate' | 'duplicate' = 'unique';
     let dailyHookBonusPoints = 0;
+    let pendingModeration = false;
 
     try {
       if (entryType === 'word') {
@@ -365,6 +366,7 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
           dailyHookBonusPoints: hookBonus,
           baseAwardedPoints: basePoints,
           uniquenessTier: returnedTier,
+          pendingModeration: pendingStatus,
         } = await withTimeout(
           createStudentVocabulary({
             studentId,
@@ -386,8 +388,9 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
         baseAwardedPoints = basePoints ?? 0;
         uniquenessTier = returnedTier ?? 'unique';
         dailyHookBonusPoints = hookBonus ?? 0;
+        pendingModeration = Boolean(pendingStatus);
       } else {
-        const { error, baseAwardedPoints: basePoints, uniquenessTier: returnedTier } = await withTimeout(
+        const { error, baseAwardedPoints: basePoints, uniquenessTier: returnedTier, pendingModeration: pendingStatus } = await withTimeout(
           createStudentExpression({
             studentId,
             expression: term,
@@ -406,31 +409,35 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
         }
         baseAwardedPoints = basePoints ?? 0;
         uniquenessTier = returnedTier ?? 'unique';
+        pendingModeration = Boolean(pendingStatus);
       }
 
       setStatusMessage(null);
-      const toastMessage =
-        savedType === 'word'
+      const toastMessage = pendingModeration
+        ? `${savedType === 'word' ? 'Word' : 'Expression'} submitted for moderation. Points will be awarded after approval.`
+        : savedType === 'word'
           ? `Word saved${aiAssisted ? ' (AI-assisted)' : ''}.${uniquenessTier === 'duplicate' ? ' +0 base points.' : ` +${baseAwardedPoints} base points.`}${
               dailyHookBonusPoints > 0 ? ` +${dailyHookBonusPoints} bonus points.` : ''
             }`
           : `Expression saved${aiAssisted ? ' (AI-assisted)' : ''}.${uniquenessTier === 'duplicate' ? ' +0 base points.' : ` +${baseAwardedPoints} base points.`}`;
       showToast(toastMessage, 'success');
-      setMicroFeedback(buildMicroFeedback(savedType, savedTerm, savedDefinition, savedCategory));
-      const contextResult = scoreContextUsage(savedTerm, exampleSentence);
-      setContextScore(contextResult);
-      if (contextResult.bonusPoints > 0) {
-        await awardStudentPoints(studentId, contextResult.bonusPoints);
-      }
+      if (!pendingModeration) {
+        setMicroFeedback(buildMicroFeedback(savedType, savedTerm, savedDefinition, savedCategory));
+        const contextResult = scoreContextUsage(savedTerm, exampleSentence);
+        setContextScore(contextResult);
+        if (contextResult.bonusPoints > 0) {
+          await awardStudentPoints(studentId, contextResult.bonusPoints);
+        }
 
-      const streamBody =
-        savedType === 'word'
-          ? `Added a new vocabulary word: "${savedTerm.trim()}".`
-          : `Added a new expression: "${savedTerm.trim()}".`;
-      const streamResult = await createStreamPost({ authorId: studentId, body: streamBody });
-      if (streamResult.error) {
-        setErrorMessage(`Saved, but stream post failed: ${streamResult.error.message}`);
-        showToast(`Saved, but stream post failed: ${streamResult.error.message}`, 'error');
+        const streamBody =
+          savedType === 'word'
+            ? `Added a new vocabulary word: "${savedTerm.trim()}".`
+            : `Added a new expression: "${savedTerm.trim()}".`;
+        const streamResult = await createStreamPost({ authorId: studentId, body: streamBody });
+        if (streamResult.error) {
+          setErrorMessage(`Saved, but stream post failed: ${streamResult.error.message}`);
+          showToast(`Saved, but stream post failed: ${streamResult.error.message}`, 'error');
+        }
       }
 
       setTerm('');

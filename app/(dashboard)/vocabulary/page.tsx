@@ -12,6 +12,7 @@ export default function VocabularyPage() {
   const studentId = profile?.id ?? user?.id ?? null;
   const [vocabularyItems, setVocabularyItems] = useState<Vocabulary[]>([]);
   const [loading, setLoading] = useState(true);
+  const pendingCount = vocabularyItems.filter((item) => item.moderation_status === 'pending').length;
 
   const loadVocabulary = async () => {
     if (authLoading) {
@@ -41,6 +42,12 @@ export default function VocabularyPage() {
       </div>
 
       <VocabularyCollector onSaved={loadVocabulary} />
+
+      {pendingCount > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          {pendingCount} submission{pendingCount === 1 ? '' : 's'} pending teacher approval.
+        </div>
+      )}
 
       {loading ? (
         <div className="relative overflow-hidden rounded-2xl border border-blue-100 bg-white p-4 shadow-sm md:p-5">

@@ -1,7 +1,7 @@
 import type { StudentBadge } from '@/types';
 import type { StudentMetrics } from '@/lib/student-data';
 
-type BadgeMetric = 'wordsCollected' | 'expressionsCollected' | 'streak' | 'points';
+type BadgeMetric = 'wordsCollected' | 'expressionsCollected' | 'streak' | 'points' | 'capsulesCompleted';
 
 interface BadgeDefinition {
   id: string;
@@ -81,6 +81,17 @@ export const fallbackBadgeDefinitions: BadgeDefinition[] = [
     target: 400,
     metric: 'points',
     reward_points: 80,
+  },
+  {
+    id: 'capsule-scholar',
+    slug: 'capsule-scholar',
+    name: 'Capsule Scholar',
+    description: 'Complete 3 education capsules.',
+    icon: 'target',
+    color: 'rose',
+    target: 3,
+    metric: 'capsulesCompleted',
+    reward_points: 50,
   },
 ];
 

@@ -15,6 +15,7 @@ const emptyMetrics: StudentMetrics = {
   streak: 0,
   wordsCollected: 0,
   expressionsCollected: 0,
+  capsulesCompleted: 0,
 };
 
 const avatarOptions = Array.from({ length: 8 }, (_, index) => ({

@@ -113,6 +113,16 @@ Last updated: 2026-02-15 (AI generation + word images + teacher dictionary contr
 - Added client-side image compression/resizing before upload (webp output).
 - Replaced recent `<img>` usage with `next/image` and validated clean lint/build.
 
+### 2026-05-27
+- Implemented **Education Capsules** feature, enabling teachers to assign self-contained micro-learning units with media, text, and quizzes.
+- Created DB migration script at `supabase/capsules_migration.sql` featuring 5 tables: `education_capsules`, `capsule_quiz_questions`, `capsule_class_assignments`, `capsule_student_assignments`, and `capsule_completions`.
+- Updated TypeScript types in `types/index.ts` to support capsule interfaces.
+- Added data access module `lib/capsule-data.ts` for all database operations, with support for MCQ, True/False, and Fill-in-the-blank question types, plus 80% passing grade logic and 50 points completion rewards.
+- Extended `lib/student-data.ts` and `lib/badges-data.ts` to track capsule completions and added the "Capsule Scholar" badge.
+- Added "Manage Capsules" and "Your Capsules" sections with inline quiz question builders and assignment manager in the Teacher/Admin Dashboard (`app/admin/dashboard/page.tsx`).
+- Created student-facing capsules browser and viewer page (`app/(dashboard)/capsules/page.tsx`) with interactive quiz interface and support for image, video (embeds), audio, and PDF documents.
+- Integrated Capsules navigation inside `components/layout/Navbar.tsx` and added Capsules Passed counter inside Student Dashboard (`app/(dashboard)/dashboard/page.tsx`).
+
 ## Decision Log
 
 | Date | Decision | Reason |
@@ -123,11 +133,15 @@ Last updated: 2026-02-15 (AI generation + word images + teacher dictionary contr
 | 2026-02-14 | Skip in-app pronunciation feature | Practice will be delivered live in class |
 | 2026-02-15 | Use Supabase Storage bucket `lexikeep` for student word images | Centralized, reliable media handling from app UI |
 | 2026-02-15 | Use NVIDIA-hosted Llama endpoint for AI generation | Stable hosted inference with OpenAI-compatible API |
+| 2026-05-27 | Education Capsules quiz types | User-confirmed support for MCQ, True/False, and Fill-in-the-blank |
+| 2026-05-27 | Retakes and Points policy | Student can retake capsules for practice but only earn the 50 points once (upon first passing score of >= 80%) |
 
 ## Ready Next
 
-1. Add image replace/remove controls per vocabulary item (student + teacher moderation path).
-2. Add pagination/infinite-scroll in teacher Student Dictionaries for large classes.
-3. Add AI fallback template when model call fails (quick non-blocking UX).
-4. Tune point economics after one week of real usage data.
-5. Start next `P3-04` analytics slice (per-team and per-material learning insights over time).
+1. Run SQL migration script `supabase/capsules_migration.sql` in Supabase dashboard to apply DB updates.
+2. Add image replace/remove controls per vocabulary item (student + teacher moderation path).
+3. Add pagination/infinite-scroll in teacher Student Dictionaries for large classes.
+4. Add AI fallback template when model call fails (quick non-blocking UX).
+5. Tune point economics after one week of real usage data.
+6. Start next `P3-04` analytics slice (per-team and per-material learning insights over time).
+

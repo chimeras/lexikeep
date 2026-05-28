@@ -4,13 +4,16 @@ import { getStudentReviewStreak } from '@/lib/review-streak';
 import { createSystemStreamPost } from '@/lib/stream-data';
 import { supabase } from '@/lib/supabase';
 import type { DailyChallenge, Expression, Profile, Vocabulary } from '@/types';
+import { createNotification } from './notifications-data';
 
 export interface StudentMetrics {
   points: number;
   streak: number;
   wordsCollected: number;
   expressionsCollected: number;
+  capsulesCompleted: number;
 }
+
 
 type EntryUniquenessTier = 'unique' | 'near_duplicate' | 'duplicate';
 
@@ -25,6 +28,19 @@ const UNIQUENESS_SCAN_LIMIT = 1500;
 const DB_UNDEFINED_COLUMN_CODE = '42703';
 const AI_ASSISTED_BASE_POINTS_MULTIPLIER = 0.6;
 const MISSING_COLUMN_CODE = '42703';
+type VocabularyDifficulty = 'easy' | 'medium' | 'hard';
+const VOCABULARY_DIFFICULTY_BASE_POINTS: Record<VocabularyDifficulty, number> = {
+  easy: 6,
+  medium: 10,
+  hard: 14,
+};
+
+const normalizeDifficulty = (difficulty?: string | null): VocabularyDifficulty => {
+  if (difficulty === 'easy' || difficulty === 'hard') {
+    return difficulty;
+  }
+  return 'medium';
+};
 
 export const incrementStudentPoints = async (studentId: string, delta: number) => {
   const { data: profile, error: readError } = await supabase
@@ -344,11 +360,12 @@ const claimDailyHookBonus = async ({
 };
 
 export const getStudentMetrics = async (studentId: string): Promise<StudentMetrics> => {
-  const [profileRes, wordsResRaw, expressionsResRaw, reviewStreak] = await Promise.all([
+  const [profileRes, wordsResRaw, expressionsResRaw, reviewStreak, capsulesRes] = await Promise.all([
     supabase.from('profiles').select('points').eq('id', studentId).maybeSingle(),
     supabase.from('vocabulary').select('*', { count: 'exact', head: true }).eq('student_id', studentId).eq('moderation_status', 'approved'),
     supabase.from('expressions').select('*', { count: 'exact', head: true }).eq('student_id', studentId).eq('moderation_status', 'approved'),
     getStudentReviewStreak(studentId),
+    supabase.from('capsule_completions').select('*', { count: 'exact', head: true }).eq('student_id', studentId).eq('passed', true),
   ]);
 
   const [wordsRes, expressionsRes] = await Promise.all([
@@ -361,13 +378,17 @@ export const getStudentMetrics = async (studentId: string): Promise<StudentMetri
   ]);
 
   const profile = profileRes.data as Pick<Profile, 'points'> | null;
+  const capsulesCompleted = capsulesRes.error ? 0 : (capsulesRes.count ?? 0);
+
   return {
     points: profile?.points ?? 0,
     streak: reviewStreak,
     wordsCollected: wordsRes.count ?? 0,
     expressionsCollected: expressionsRes.count ?? 0,
+    capsulesCompleted,
   };
 };
+
 
 export const getStudentVocabulary = async (studentId: string) => {
   const { data, error } = await supabase
@@ -423,6 +444,7 @@ const awardForApprovedVocabulary = async ({
   definition,
   exampleSentence,
   aiAssisted,
+  difficulty,
 }: {
   studentId: string;
   vocabularyId: string;
@@ -430,6 +452,7 @@ const awardForApprovedVocabulary = async ({
   definition: string;
   exampleSentence?: string | null;
   aiAssisted: boolean;
+  difficulty?: string | null;
 }) => {
   await ensureReviewItem({
     studentId,
@@ -440,7 +463,11 @@ const awardForApprovedVocabulary = async ({
     contextHint: exampleSentence ?? undefined,
   });
 
-  const basePoints = aiAssisted ? Math.max(1, Math.round(10 * AI_ASSISTED_BASE_POINTS_MULTIPLIER)) : 10;
+  const normalizedDifficulty = normalizeDifficulty(difficulty);
+  const difficultyBasePoints = VOCABULARY_DIFFICULTY_BASE_POINTS[normalizedDifficulty];
+  const basePoints = aiAssisted
+    ? Math.max(1, Math.round(difficultyBasePoints * AI_ASSISTED_BASE_POINTS_MULTIPLIER))
+    : difficultyBasePoints;
   const uniquenessResult = await evaluateEntryUniqueness({
     table: 'vocabulary',
     normalizedColumn: 'normalized_word',
@@ -531,6 +558,7 @@ interface NewVocabularyInput {
   category?: string;
   imageUrl?: string;
   aiAssisted?: boolean;
+  difficulty?: VocabularyDifficulty;
 }
 
 export const createStudentVocabulary = async ({
@@ -542,6 +570,7 @@ export const createStudentVocabulary = async ({
   category,
   imageUrl,
   aiAssisted,
+  difficulty,
 }: NewVocabularyInput) => {
   const moderationRes = await getStudentModerationRequirement(studentId);
   if (moderationRes.error) {
@@ -561,7 +590,7 @@ export const createStudentVocabulary = async ({
       student_id: studentId,
       ai_assisted: Boolean(aiAssisted),
       ai_provider: aiAssisted ? 'ollama' : null,
-      difficulty: 'medium',
+      difficulty: normalizeDifficulty(difficulty),
       status: 'learning',
       moderation_status: moderationStatus,
       tags: [],
@@ -592,6 +621,7 @@ export const createStudentVocabulary = async ({
     definition: data.definition,
     exampleSentence: data.example_sentence,
     aiAssisted: Boolean(aiAssisted),
+    difficulty: data.difficulty,
   });
   if (awardRes.error) {
     return { data: null, error: awardRes.error, dailyHookBonusPoints: 0, dailyHookMatched: false };
@@ -701,7 +731,7 @@ export const approveVocabularyEntry = async ({
     })
     .eq('id', vocabularyId)
     .eq('moderation_status', 'pending')
-    .select('id,student_id,word,definition,example_sentence,ai_assisted')
+    .select('id,student_id,word,definition,example_sentence,ai_assisted,difficulty')
     .maybeSingle();
 
   if (error || !data) {
@@ -715,11 +745,21 @@ export const approveVocabularyEntry = async ({
     definition: data.definition,
     exampleSentence: data.example_sentence,
     aiAssisted: Boolean(data.ai_assisted),
+    difficulty: data.difficulty,
   });
 
   if (awardRes.error) {
     return { error: awardRes.error, awardedPoints: 0 };
   }
+
+  await createNotification({
+    recipientId: data.student_id,
+    senderId: moderatorId,
+    type: 'moderation',
+    title: 'Vocabulary Entry Approved',
+    body: `Your vocabulary entry "${data.word}" has been approved!`,
+    link: '/vocabulary',
+  }).catch(() => null);
 
   return {
     error: null,
@@ -736,7 +776,7 @@ export const rejectVocabularyEntry = async ({
   moderatorId: string;
   reason?: string;
 }) => {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('vocabulary')
     .update({
       moderation_status: 'rejected',
@@ -745,8 +785,24 @@ export const rejectVocabularyEntry = async ({
       moderation_reason: reason?.trim() || null,
     })
     .eq('id', vocabularyId)
-    .eq('moderation_status', 'pending');
-  return { error };
+    .eq('moderation_status', 'pending')
+    .select('student_id,word')
+    .maybeSingle();
+
+  if (error || !data) {
+    return { error: error ?? { message: 'Entry not found or already moderated.' } };
+  }
+
+  await createNotification({
+    recipientId: data.student_id,
+    senderId: moderatorId,
+    type: 'moderation',
+    title: 'Vocabulary Entry Rejected',
+    body: `Your vocabulary entry "${data.word}" was rejected.${reason ? ` Reason: ${reason}` : ''}`,
+    link: '/vocabulary',
+  }).catch(() => null);
+
+  return { error: null };
 };
 
 export const approveExpressionEntry = async ({
@@ -786,6 +842,15 @@ export const approveExpressionEntry = async ({
     return { error: awardRes.error, awardedPoints: 0 };
   }
 
+  await createNotification({
+    recipientId: data.student_id,
+    senderId: moderatorId,
+    type: 'moderation',
+    title: 'Expression Entry Approved',
+    body: `Your expression entry "${data.expression}" has been approved!`,
+    link: '/vocabulary',
+  }).catch(() => null);
+
   return {
     error: null,
     awardedPoints: awardRes.baseAwardedPoints ?? 0,
@@ -801,7 +866,7 @@ export const rejectExpressionEntry = async ({
   moderatorId: string;
   reason?: string;
 }) => {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('expressions')
     .update({
       moderation_status: 'rejected',
@@ -810,6 +875,22 @@ export const rejectExpressionEntry = async ({
       moderation_reason: reason?.trim() || null,
     })
     .eq('id', expressionId)
-    .eq('moderation_status', 'pending');
-  return { error };
+    .eq('moderation_status', 'pending')
+    .select('student_id,expression')
+    .maybeSingle();
+
+  if (error || !data) {
+    return { error: error ?? { message: 'Entry not found or already moderated.' } };
+  }
+
+  await createNotification({
+    recipientId: data.student_id,
+    senderId: moderatorId,
+    type: 'moderation',
+    title: 'Expression Entry Rejected',
+    body: `Your expression entry "${data.expression}" was rejected.${reason ? ` Reason: ${reason}` : ''}`,
+    link: '/vocabulary',
+  }).catch(() => null);
+
+  return { error: null };
 };

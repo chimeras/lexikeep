@@ -1,7 +1,7 @@
 'use client';
 
 import { BookCopy, ClipboardList, Flag, Users, Zap } from 'lucide-react';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import StatsCard from '@/components/dashboard/StatsCard';
 import { useAuth } from '@/components/providers/AuthProvider';
@@ -19,6 +19,20 @@ import {
 import { createMaterial, deleteMaterial, getTeacherMaterials, updateMaterial } from '@/lib/materials-data';
 import { getReviewAnalytics, type ReviewAnalytics } from '@/lib/review-analytics';
 import { supabase } from '@/lib/supabase';
+import {
+  getTeacherCapsules,
+  createCapsule,
+  updateCapsule,
+  deleteCapsule,
+  publishCapsule,
+  getCapsuleQuestions,
+  setCapsuleQuestions,
+  assignCapsuleToClass,
+  removeCapsuleFromClass,
+  assignCapsuleToStudent,
+  removeCapsuleFromStudent,
+  getCapsuleAssignments,
+} from '@/lib/capsule-data';
 import type {
   DailyChallenge,
   Expression,
@@ -30,6 +44,10 @@ import type {
   TeamMembership,
   TeacherBoost,
   Vocabulary,
+  EducationCapsule,
+  CapsuleQuizQuestion,
+  CapsuleClassAssignment,
+  CapsuleStudentAssignment,
 } from '@/types';
 import {
   assignStudentToTeam,
@@ -48,6 +66,7 @@ import {
   updateTeacherBoost,
 } from '@/lib/boosts-data';
 import { getTeacherClasses } from '@/lib/classes-data';
+import { sendBulkClassNotification } from '@/lib/notifications-data';
 import InlineSpinner from '@/components/ui/InlineSpinner';
 
 const parseTags = (tagText: string) =>
@@ -56,19 +75,39 @@ const parseTags = (tagText: string) =>
     .map((tag) => tag.trim())
     .filter(Boolean);
 
+function getEmbedUrl(url: string) {
+  if (!url) return '';
+  if (url.includes('youtube.com/watch?v=')) {
+    const id = url.split('watch?v=')[1]?.split('&')[0];
+    return `https://www.youtube.com/embed/${id}`;
+  }
+  if (url.includes('youtu.be/')) {
+    const id = url.split('youtu.be/')[1]?.split('?')[0];
+    return `https://www.youtube.com/embed/${id}`;
+  }
+  if (url.includes('vimeo.com/')) {
+    const id = url.split('vimeo.com/')[1]?.split('?')[0];
+    return `https://player.vimeo.com/video/${id}`;
+  }
+  return url;
+}
+
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const escapeCsvCell = (value: string | number | null | undefined) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
 const sectionItems = [
   { id: 'overview', label: 'Overview' },
   { id: 'materials-form', label: 'Manage Materials' },
+  { id: 'capsules-form', label: 'Manage Capsules' },
   { id: 'daily-form', label: 'Daily Challenges' },
   { id: 'quest-form', label: 'Weekly Quests' },
   { id: 'teams-form', label: 'Manage Teams' },
   { id: 'teams-members', label: 'Team Members' },
   { id: 'students-dictionary', label: 'Student Dictionaries' },
   { id: 'boosts-form', label: 'Teacher Boosts' },
+  { id: 'announcements-form', label: 'Send Announcement' },
   { id: 'materials-list', label: 'Your Materials' },
+  { id: 'capsules-list', label: 'Your Capsules' },
   { id: 'daily-list', label: 'Your Daily Challenges' },
   { id: 'quest-list', label: 'Your Quests' },
   { id: 'teams-list', label: 'Your Teams' },
@@ -105,6 +144,13 @@ export default function AdminDashboardPage() {
   const [selectedTeamId, setSelectedTeamId] = useState('');
   const [loading, setLoading] = useState(true);
 
+  const [announcementClassId, setAnnouncementClassId] = useState('');
+  const [announcementTitle, setAnnouncementTitle] = useState('');
+  const [announcementBody, setAnnouncementBody] = useState('');
+  const [sendingAnnouncement, setSendingAnnouncement] = useState(false);
+  const [announcementSuccess, setAnnouncementSuccess] = useState(false);
+  const [announcementError, setAnnouncementError] = useState<string | null>(null);
+
   const [savingMaterial, setSavingMaterial] = useState(false);
   const [savingDailyChallenge, setSavingDailyChallenge] = useState(false);
   const [savingQuest, setSavingQuest] = useState(false);
@@ -124,6 +170,61 @@ export default function AdminDashboardPage() {
   const [editingQuestId, setEditingQuestId] = useState<string | null>(null);
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editingBoostId, setEditingBoostId] = useState<string | null>(null);
+
+  // Education Capsules States
+  const [capsules, setCapsules] = useState<EducationCapsule[]>([]);
+  const [savingCapsule, setSavingCapsule] = useState(false);
+  const [deletingCapsuleId, setDeletingCapsuleId] = useState<string | null>(null);
+  const [editingCapsuleId, setEditingCapsuleId] = useState<string | null>(null);
+
+  const [capsuleTitle, setCapsuleTitle] = useState('');
+  const [capsuleTopic, setCapsuleTopic] = useState('');
+  const [capsuleDescription, setCapsuleDescription] = useState('');
+  const [capsuleMediaType, setCapsuleMediaType] = useState<'image' | 'video' | 'document' | 'audio'>('image');
+  const [capsuleMediaUrl, setCapsuleMediaUrl] = useState('');
+  const [capsuleContentText, setCapsuleContentText] = useState('');
+  const [capsuleRewardPoints, setCapsuleRewardPoints] = useState(50);
+  const [capsuleIsPublished, setCapsuleIsPublished] = useState(false);
+
+  // Quiz Builder State
+  interface LocalQuestion {
+    id?: string;
+    question_text: string;
+    question_type: 'mcq' | 'fill_blank' | 'true_false';
+    options: string[];
+    correct_option_index: number;
+    correct_answer: string;
+  }
+  const [quizQuestions, setQuizQuestions] = useState<LocalQuestion[]>([
+    { question_text: '', question_type: 'mcq', options: ['', '', '', ''], correct_option_index: 0, correct_answer: '' }
+  ]);
+
+  // Assignments States
+  const [selectedCapsuleForAssignment, setSelectedCapsuleForAssignment] = useState<EducationCapsule | null>(null);
+  const [assignClassId, setAssignClassId] = useState('');
+  const [assignStudentId, setAssignStudentId] = useState('');
+  const [currentClassAssignments, setCurrentClassAssignments] = useState<Array<CapsuleClassAssignment & { class: { id: string; name: string } }>>([]);
+  const [currentStudentAssignments, setCurrentStudentAssignments] = useState<Array<CapsuleStudentAssignment & { student: { id: string; username: string } }>>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
+
+  // Quill Editor & Preview states
+  const quillRef = useRef<any>(null);
+  const [isHtmlMode, setIsHtmlMode] = useState(false);
+  const [previewCapsule, setPreviewCapsule] = useState<{
+    title: string;
+    topic: string;
+    description: string | null;
+    media_type: 'image' | 'video' | 'document' | 'audio';
+    media_url: string;
+    content_text: string;
+    reward_points: number;
+  } | null>(null);
+  const [previewQuestions, setPreviewQuestions] = useState<LocalQuestion[]>([]);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewSelectedAnswers, setPreviewSelectedAnswers] = useState<Record<number, { optionIndex?: number; textAnswer?: string }>>({});
+  const [previewResult, setPreviewResult] = useState<{ score: number; total: number; passed: boolean } | null>(null);
+
+
 
   const [message, setMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -374,7 +475,7 @@ export default function AdminDashboardPage() {
     if (!profile?.id) return;
     setLoading(true);
 
-    const [materialsRes, studentsRes, competitionsRes, dailyChallengesRes, questsRes, teamsRes, classesRes, rosterRes, boostsRes, reviewAnalyticsRes, insightsRes] = await Promise.all([
+    const [materialsRes, studentsRes, competitionsRes, dailyChallengesRes, questsRes, teamsRes, classesRes, rosterRes, boostsRes, reviewAnalyticsRes, insightsRes, capsulesRes] = await Promise.all([
       getTeacherMaterials(profile.id),
       supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student'),
       supabase.from('competitions').select('*', { count: 'exact', head: true }).eq('teacher_id', profile.id),
@@ -386,6 +487,7 @@ export default function AdminDashboardPage() {
       getTeacherBoosts(profile.id),
       getReviewAnalytics(),
       getAdminInsights(profile.id),
+      getTeacherCapsules(profile.id),
     ]);
 
     setMaterials(materialsRes.data);
@@ -395,6 +497,7 @@ export default function AdminDashboardPage() {
     setClasses(classesRes.data);
     setStudents(rosterRes.data);
     setBoosts(boostsRes.data);
+    setCapsules(capsulesRes.error ? [] : capsulesRes.data);
     setReviewAnalytics(reviewAnalyticsRes);
     setMaterialInsights(insightsRes.materialInsights);
     setTeamInsights(insightsRes.teamInsights);
@@ -444,6 +547,324 @@ export default function AdminDashboardPage() {
     setStudentDictionaryDateFilter('');
     setStudentDictionaryRecentOnly(false);
   }, [selectedStudentId]);
+
+  useEffect(() => {
+    if (activeSection !== 'capsules-form') {
+      quillRef.current = null;
+      return;
+    }
+
+    let link = document.querySelector('link[href*="quill.snow.css"]') as HTMLLinkElement;
+    if (!link) {
+      link = document.createElement('link');
+      link.href = 'https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css';
+      link.rel = 'stylesheet';
+      document.head.appendChild(link);
+    }
+
+    const scriptId = 'quill-script-cdn';
+    let script = document.getElementById(scriptId) as HTMLScriptElement;
+    
+    const initQuill = () => {
+      const Quill = (window as any).Quill;
+      const container = document.getElementById('quill-editor-container');
+      if (!Quill || !container) return;
+
+      container.innerHTML = '';
+      const editorDiv = document.createElement('div');
+      editorDiv.id = 'quill-rich-editor';
+      editorDiv.style.height = '240px';
+      container.appendChild(editorDiv);
+
+      const quill = new Quill('#quill-rich-editor', {
+        theme: 'snow',
+        modules: {
+          toolbar: [
+            [{ font: [] }, { size: [] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            [{ color: [] }, { background: [] }],
+            [{ script: 'sub' }, { script: 'super' }],
+            [{ header: [1, 2, 3, 4, 5, 6, false] }, 'blockquote', 'code-block'],
+            [{ list: 'ordered' }, { list: 'bullet' }, { indent: '-1' }, { indent: '+1' }],
+            [{ direction: 'rtl' }, { align: [] }],
+            ['link', 'image', 'video'],
+            ['clean']
+          ]
+        }
+      });
+
+      quill.root.innerHTML = capsuleContentText;
+      quillRef.current = quill;
+
+      quill.on('text-change', () => {
+        setCapsuleContentText(quill.root.innerHTML);
+      });
+    };
+
+    if (!script) {
+      script = document.createElement('script');
+      script.id = scriptId;
+      script.src = 'https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js';
+      script.async = true;
+      script.onload = initQuill;
+      document.head.appendChild(script);
+    } else {
+      if ((window as any).Quill) {
+        setTimeout(initQuill, 50);
+      } else {
+        script.addEventListener('load', initQuill);
+      }
+    }
+
+    return () => {
+      quillRef.current = null;
+    };
+  }, [activeSection]);
+
+
+  const resetCapsuleForm = () => {
+    setEditingCapsuleId(null);
+    setCapsuleTitle('');
+    setCapsuleTopic('');
+    setCapsuleDescription('');
+    setCapsuleMediaType('image');
+    setCapsuleMediaUrl('');
+    setCapsuleContentText('');
+    setCapsuleRewardPoints(50);
+    setCapsuleIsPublished(false);
+    setIsHtmlMode(false);
+    setQuizQuestions([
+      { question_text: '', question_type: 'mcq', options: ['', '', '', ''], correct_option_index: 0, correct_answer: '' }
+    ]);
+    if (quillRef.current) {
+      quillRef.current.root.innerHTML = '';
+    }
+  };
+
+  const loadCapsules = async () => {
+    if (!profile?.id) return;
+    const res = await getTeacherCapsules(profile.id);
+    setCapsules(res.error ? [] : res.data);
+  };
+
+  const loadCapsuleAssignmentsData = async (capsuleId: string) => {
+    setLoadingAssignments(true);
+    const { classAssignments, studentAssignments } = await getCapsuleAssignments(capsuleId);
+    setCurrentClassAssignments(classAssignments);
+    setCurrentStudentAssignments(studentAssignments);
+    setLoadingAssignments(false);
+  };
+
+  const handleCapsuleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!profile?.id) {
+      setErrorMessage('Teacher profile is required.');
+      return;
+    }
+
+    if (quizQuestions.length === 0) {
+      setErrorMessage('A capsule must have at least one quiz question.');
+      return;
+    }
+
+    for (let i = 0; i < quizQuestions.length; i++) {
+      const q = quizQuestions[i];
+      if (!q.question_text.trim()) {
+        setErrorMessage(`Question ${i + 1} text is required.`);
+        return;
+      }
+      if (q.question_type === 'mcq') {
+        if (q.options.some(opt => !opt.trim())) {
+          setErrorMessage(`All 4 options for Question ${i + 1} (MCQ) are required.`);
+          return;
+        }
+      } else if (q.question_type === 'fill_blank') {
+        if (!q.correct_answer.trim()) {
+          setErrorMessage(`Correct answer for Question ${i + 1} (Fill-in-the-blank) is required.`);
+          return;
+        }
+      }
+    }
+
+    setSavingCapsule(true);
+    setMessage(null);
+    setErrorMessage(null);
+
+    const payload = {
+      title: capsuleTitle,
+      topic: capsuleTopic,
+      description: capsuleDescription,
+      mediaType: capsuleMediaType,
+      mediaUrl: capsuleMediaUrl,
+      contentText: capsuleContentText,
+      rewardPoints: capsuleRewardPoints,
+      isPublished: capsuleIsPublished,
+      createdBy: profile.id,
+    };
+
+    let capsuleId = editingCapsuleId;
+    let err = null;
+
+    if (editingCapsuleId) {
+      const result = await updateCapsule({ id: editingCapsuleId, ...payload });
+      if (result.error) {
+        err = result.error;
+      }
+    } else {
+      const result = await createCapsule(payload);
+      if (result.error) {
+        err = result.error;
+      } else if (result.data) {
+        capsuleId = result.data.id;
+      }
+    }
+
+    if (err) {
+      setErrorMessage(err.message);
+      setSavingCapsule(false);
+      return;
+    }
+
+    if (capsuleId) {
+      const questionPayload = quizQuestions.map((q) => {
+        if (q.question_type === 'mcq') {
+          return {
+            question_text: q.question_text,
+            question_type: 'mcq' as const,
+            options: q.options,
+            correct_option_index: q.correct_option_index,
+            correct_answer: null,
+            order_index: 0,
+          };
+        } else if (q.question_type === 'true_false') {
+          return {
+            question_text: q.question_text,
+            question_type: 'true_false' as const,
+            options: ['True', 'False'],
+            correct_option_index: q.correct_option_index,
+            correct_answer: null,
+            order_index: 0,
+          };
+        } else {
+          return {
+            question_text: q.question_text,
+            question_type: 'fill_blank' as const,
+            options: null,
+            correct_option_index: null,
+            correct_answer: q.correct_answer.toLowerCase().trim(),
+            order_index: 0,
+          };
+        }
+      });
+
+      const qResult = await setCapsuleQuestions(capsuleId, questionPayload);
+      if (qResult.error) {
+        setErrorMessage(`Capsule saved but failed to update quiz: ${qResult.error.message}`);
+        setSavingCapsule(false);
+        await loadCapsules();
+        return;
+      }
+    }
+
+    setMessage(editingCapsuleId ? 'Capsule updated successfully.' : 'Capsule created successfully.');
+    resetCapsuleForm();
+    await loadCapsules();
+    setSavingCapsule(false);
+    setActiveSection('capsules-list');
+  };
+
+  const handleDeleteCapsule = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this capsule? This will remove all student scores and completions.')) {
+      return;
+    }
+    setDeletingCapsuleId(id);
+    setMessage(null);
+    setErrorMessage(null);
+    const { error } = await deleteCapsule(id, profile?.id ?? '');
+    if (error) {
+      setErrorMessage(error.message);
+    } else {
+      setMessage('Capsule deleted successfully.');
+      await loadCapsules();
+    }
+    setDeletingCapsuleId(null);
+  };
+
+  const handlePublishCapsule = async (id: string, isPublished: boolean) => {
+    setMessage(null);
+    setErrorMessage(null);
+    const { error } = await publishCapsule(id, profile?.id ?? '', isPublished);
+    if (error) {
+      setErrorMessage(error.message);
+    } else {
+      setMessage(isPublished ? 'Capsule published.' : 'Capsule unpublished.');
+      await loadCapsules();
+    }
+  };
+
+  const handleAssignClass = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedCapsuleForAssignment || !assignClassId) return;
+    setMessage(null);
+    setErrorMessage(null);
+    const { error } = await assignCapsuleToClass(selectedCapsuleForAssignment.id, assignClassId);
+    if (error) {
+      if (error.code === '23505') {
+        setErrorMessage('This class is already assigned to this capsule.');
+      } else {
+        setErrorMessage(error.message);
+      }
+    } else {
+      setMessage('Capsule assigned to class.');
+      setAssignClassId('');
+      await loadCapsuleAssignmentsData(selectedCapsuleForAssignment.id);
+    }
+  };
+
+  const handleRemoveClass = async (classId: string) => {
+    if (!selectedCapsuleForAssignment) return;
+    setMessage(null);
+    setErrorMessage(null);
+    const { error } = await removeCapsuleFromClass(selectedCapsuleForAssignment.id, classId);
+    if (error) {
+      setErrorMessage(error.message);
+    } else {
+      setMessage('Class assignment removed.');
+      await loadCapsuleAssignmentsData(selectedCapsuleForAssignment.id);
+    }
+  };
+
+  const handleAssignStudent = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selectedCapsuleForAssignment || !assignStudentId) return;
+    setMessage(null);
+    setErrorMessage(null);
+    const { error } = await assignCapsuleToStudent(selectedCapsuleForAssignment.id, assignStudentId);
+    if (error) {
+      if (error.code === '23505') {
+        setErrorMessage('This student is already directly assigned to this capsule.');
+      } else {
+        setErrorMessage(error.message);
+      }
+    } else {
+      setMessage('Capsule assigned to student.');
+      setAssignStudentId('');
+      await loadCapsuleAssignmentsData(selectedCapsuleForAssignment.id);
+    }
+  };
+
+  const handleRemoveStudent = async (studentId: string) => {
+    if (!selectedCapsuleForAssignment) return;
+    setMessage(null);
+    setErrorMessage(null);
+    const { error } = await removeCapsuleFromStudent(selectedCapsuleForAssignment.id, studentId);
+    if (error) {
+      setErrorMessage(error.message);
+    } else {
+      setMessage('Student assignment removed.');
+      await loadCapsuleAssignmentsData(selectedCapsuleForAssignment.id);
+    }
+  };
 
   const handleMaterialSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -654,6 +1075,35 @@ export default function AdminDashboardPage() {
     setDeletingTeamId(null);
   };
 
+  const handleAnnouncementSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!profile?.id || !announcementClassId || !announcementTitle.trim() || !announcementBody.trim()) {
+      setAnnouncementError('Please fill out all fields.');
+      return;
+    }
+    setSendingAnnouncement(true);
+    setAnnouncementSuccess(false);
+    setAnnouncementError(null);
+
+    const { error } = await sendBulkClassNotification({
+      classId: announcementClassId,
+      senderId: profile.id,
+      type: 'announcement',
+      title: announcementTitle.trim(),
+      body: announcementBody.trim(),
+      link: '/dashboard',
+    });
+
+    setSendingAnnouncement(false);
+    if (error) {
+      setAnnouncementError(error.message || 'Failed to send announcement.');
+    } else {
+      setAnnouncementSuccess(true);
+      setAnnouncementTitle('');
+      setAnnouncementBody('');
+    }
+  };
+
   const handleBoostSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!profile?.id) {
@@ -811,6 +1261,562 @@ export default function AdminDashboardPage() {
           <article className="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-200">
             <h2 className="text-lg font-semibold text-gray-900">Overview</h2>
             <p className="mt-2 text-sm text-gray-600">Select a section from the sidebar to manage materials, daily challenges, and weekly quests.</p>
+          </article>
+        );
+      case 'capsules-form':
+        return (
+          <article className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
+            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">{editingCapsuleId ? 'Edit Education Capsule' : 'Create Education Capsule'}</h2>
+              {editingCapsuleId && (
+                <button type="button" onClick={resetCapsuleForm} className="rounded-md bg-gray-100 px-3 py-1.5 text-xs">
+                  Cancel Edit
+                </button>
+              )}
+            </div>
+            <form className="grid gap-4" onSubmit={handleCapsuleSubmit}>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Capsule Title *</label>
+                  <input
+                    required
+                    value={capsuleTitle}
+                    onChange={(e) => setCapsuleTitle(e.target.value)}
+                    placeholder="e.g. Mastering Phrasal Verbs"
+                    className="w-full rounded-lg border border-gray-300 p-3"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Topic *</label>
+                  <input
+                    required
+                    value={capsuleTopic}
+                    onChange={(e) => setCapsuleTopic(e.target.value)}
+                    placeholder="e.g. Grammar, Business English"
+                    className="w-full rounded-lg border border-gray-300 p-3"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Reward Points *</label>
+                  <input
+                    required
+                    type="number"
+                    min={0}
+                    value={capsuleRewardPoints}
+                    onChange={(e) => setCapsuleRewardPoints(Number(e.target.value))}
+                    className="w-full rounded-lg border border-gray-300 p-3"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Description</label>
+                  <textarea
+                    value={capsuleDescription}
+                    onChange={(e) => setCapsuleDescription(e.target.value)}
+                    placeholder="Provide a brief summary of what this capsule covers..."
+                    className="w-full rounded-lg border border-gray-300 p-3"
+                    rows={2}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Media Type *</label>
+                  <select
+                    value={capsuleMediaType}
+                    onChange={(e) => setCapsuleMediaType(e.target.value as any)}
+                    className="w-full rounded-lg border border-gray-300 p-3"
+                  >
+                    <option value="image">Image URL</option>
+                    <option value="video">Video Embed (YouTube/Vimeo)</option>
+                    <option value="audio">Audio URL</option>
+                    <option value="document">Document / PDF Link</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Media URL *</label>
+                  <input
+                    required
+                    value={capsuleMediaUrl}
+                    onChange={(e) => setCapsuleMediaUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full rounded-lg border border-gray-300 p-3"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-gray-700">Educational text *</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (isHtmlMode) {
+                          // Switching back to Rich Text: sync textarea to Quill
+                          if (quillRef.current) {
+                            quillRef.current.root.innerHTML = capsuleContentText;
+                          }
+                          setIsHtmlMode(false);
+                        } else {
+                          // Switching to HTML mode: sync Quill to state
+                          if (quillRef.current) {
+                            setCapsuleContentText(quillRef.current.root.innerHTML);
+                          }
+                          setIsHtmlMode(true);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs bg-slate-100 hover:bg-slate-200 border border-slate-350 text-slate-700 font-bold px-2.5 py-1.5 rounded-lg transition"
+                    >
+                      {isHtmlMode ? '✍️ Switch to Rich Text Editor' : '💻 Switch to HTML/Source Editor'}
+                    </button>
+                  </div>
+                  <div className={isHtmlMode ? 'hidden' : 'block'}>
+                    <div id="quill-editor-container" className="bg-white rounded-lg border border-gray-300 overflow-hidden" />
+                  </div>
+                  {isHtmlMode && (
+                    <textarea
+                      value={capsuleContentText}
+                      onChange={(e) => setCapsuleContentText(e.target.value)}
+                      placeholder="<p>Write your educational HTML content here...</p>"
+                      className="w-full font-mono text-xs p-4 h-[290px] border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-900 text-slate-100"
+                    />
+                  )}
+                </div>
+                <div className="md:col-span-2 flex items-center gap-2">
+                  <input
+                    id="capsule-active"
+                    type="checkbox"
+                    checked={capsuleIsPublished}
+                    onChange={(e) => setCapsuleIsPublished(e.target.checked)}
+                  />
+                  <label htmlFor="capsule-active" className="text-sm font-semibold text-gray-700">
+                    Publish Capsule immediately (visible to assigned students)
+                  </label>
+                </div>
+              </div>
+
+              <div className="border-t border-gray-200 pt-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Quiz Builder (Min 1, Passing grade: 80%)</h3>
+                <div className="space-y-4">
+                  {quizQuestions.map((q, idx) => (
+                    <div key={idx} className="p-4 border border-gray-200 rounded-xl bg-gray-50 space-y-3 relative">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold text-sm text-gray-700">Question {idx + 1}</span>
+                        {quizQuestions.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setQuizQuestions(quizQuestions.filter((_, i) => i !== idx));
+                            }}
+                            className="text-xs font-semibold text-red-600 hover:underline"
+                          >
+                            Remove Question
+                          </button>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-gray-600">Question Text *</label>
+                        <input
+                          required
+                          value={q.question_text}
+                          onChange={(e) => {
+                            const newQ = [...quizQuestions];
+                            newQ[idx].question_text = e.target.value;
+                            setQuizQuestions(newQ);
+                          }}
+                          placeholder="e.g. What is the definition of..."
+                          className="w-full rounded-lg border border-gray-300 p-2 bg-white"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-gray-600">Question Type</label>
+                          <select
+                            value={q.question_type}
+                            onChange={(e) => {
+                              const newQ = [...quizQuestions];
+                              const type = e.target.value as any;
+                              newQ[idx].question_type = type;
+                              if (type === 'true_false') {
+                                newQ[idx].options = ['True', 'False'];
+                                newQ[idx].correct_option_index = 0;
+                              } else if (type === 'mcq') {
+                                newQ[idx].options = ['', '', '', ''];
+                                newQ[idx].correct_option_index = 0;
+                              } else {
+                                newQ[idx].options = [];
+                                newQ[idx].correct_answer = '';
+                              }
+                              setQuizQuestions(newQ);
+                            }}
+                            className="w-full rounded-lg border border-gray-300 p-2 bg-white"
+                          >
+                            <option value="mcq">Multiple Choice (MCQ)</option>
+                            <option value="true_false">True / False</option>
+                            <option value="fill_blank">Fill in the blank</option>
+                          </select>
+                        </div>
+
+                        {q.question_type === 'mcq' && (
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-gray-600">Correct Option *</label>
+                            <select
+                              value={q.correct_option_index}
+                              onChange={(e) => {
+                                const newQ = [...quizQuestions];
+                                newQ[idx].correct_option_index = Number(e.target.value);
+                                setQuizQuestions(newQ);
+                              }}
+                              className="w-full rounded-lg border border-gray-300 p-2 bg-white"
+                            >
+                              <option value={0}>Option 1</option>
+                              <option value={1}>Option 2</option>
+                              <option value={2}>Option 3</option>
+                              <option value={3}>Option 4</option>
+                            </select>
+                          </div>
+                        )}
+
+                        {q.question_type === 'true_false' && (
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-gray-600">Correct Answer *</label>
+                            <select
+                              value={q.correct_option_index}
+                              onChange={(e) => {
+                                const newQ = [...quizQuestions];
+                                newQ[idx].correct_option_index = Number(e.target.value);
+                                setQuizQuestions(newQ);
+                              }}
+                              className="w-full rounded-lg border border-gray-300 p-2 bg-white"
+                            >
+                              <option value={0}>True</option>
+                              <option value={1}>False</option>
+                            </select>
+                          </div>
+                        )}
+
+                        {q.question_type === 'fill_blank' && (
+                          <div className="col-span-2">
+                            <label className="mb-1 block text-xs font-medium text-gray-600">Correct Text Answer * (Case-insensitive)</label>
+                            <input
+                              required
+                              value={q.correct_answer}
+                              onChange={(e) => {
+                                const newQ = [...quizQuestions];
+                                newQ[idx].correct_answer = e.target.value;
+                                setQuizQuestions(newQ);
+                              }}
+                              placeholder="e.g. run"
+                              className="w-full rounded-lg border border-gray-300 p-2 bg-white"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {q.question_type === 'mcq' && (
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                          {q.options.map((opt, optIdx) => (
+                            <div key={optIdx}>
+                              <label className="text-[10px] text-gray-500 font-semibold">Option {optIdx + 1}</label>
+                              <input
+                                required
+                                value={opt}
+                                onChange={(e) => {
+                                  const newQ = [...quizQuestions];
+                                  newQ[idx].options[optIdx] = e.target.value;
+                                  setQuizQuestions(newQ);
+                                }}
+                                placeholder={`Option ${optIdx + 1}`}
+                                className="w-full rounded-lg border border-gray-200 p-2 bg-white text-sm"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuizQuestions([
+                        ...quizQuestions,
+                        { question_text: '', question_type: 'mcq', options: ['', '', '', ''], correct_option_index: 0, correct_answer: '' }
+                      ]);
+                    }}
+                    className="w-full py-2 border-2 border-dashed border-gray-300 rounded-xl font-semibold text-sm text-gray-600 hover:bg-gray-50 transition"
+                  >
+                    + Add Question
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={savingCapsule}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-semibold text-white disabled:bg-blue-400"
+                >
+                  {savingCapsule ? (
+                    <>
+                      <InlineSpinner size={16} /> Saving...
+                    </>
+                  ) : editingCapsuleId ? (
+                    'Update Capsule'
+                  ) : (
+                    'Create Capsule'
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreviewCapsule({
+                      title: capsuleTitle || 'Untitled Capsule',
+                      topic: capsuleTopic || 'General',
+                      description: capsuleDescription || null,
+                      media_type: capsuleMediaType,
+                      media_url: capsuleMediaUrl,
+                      content_text: capsuleContentText,
+                      reward_points: capsuleRewardPoints,
+                    });
+                    setPreviewQuestions(quizQuestions);
+                    setPreviewSelectedAnswers({});
+                    setPreviewResult(null);
+                    setShowPreviewModal(true);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg bg-gray-100 px-5 py-2.5 font-semibold text-gray-700 hover:bg-gray-200 transition"
+                >
+                  Preview Capsule
+                </button>
+              </div>
+            </form>
+          </article>
+        );
+      case 'capsules-list':
+        return (
+          <article className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
+            <h2 className="text-lg font-semibold text-gray-900">Your Education Capsules</h2>
+            
+            {loading ? (
+              <p className="mt-4 text-sm text-gray-600">Loading...</p>
+            ) : capsules.length === 0 ? (
+              <p className="mt-4 text-sm text-gray-600">No capsules created yet.</p>
+            ) : (
+              <div className="mt-4 space-y-4">
+                {capsules.map((capsule) => {
+                  const isAssigned = selectedCapsuleForAssignment?.id === capsule.id;
+                  return (
+                    <div key={capsule.id} className="rounded-xl border border-gray-200 p-4 space-y-3 bg-white shadow-xs">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="bg-blue-50 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                              {capsule.topic}
+                            </span>
+                            <span className="bg-amber-50 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                              {capsule.media_type.toUpperCase()}
+                            </span>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${capsule.is_published ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-700'}`}>
+                              {capsule.is_published ? 'Published' : 'Draft'}
+                            </span>
+                          </div>
+                          <p className="font-bold text-gray-900 text-lg mt-1">{capsule.title}</p>
+                          <p className="text-sm text-gray-600 mt-1 line-clamp-2">{capsule.description || 'No description.'}</p>
+                          <p className="text-xs text-gray-500 mt-1">Reward: {capsule.reward_points} Points</p>
+                        </div>
+                        
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedCapsuleForAssignment(isAssigned ? null : capsule);
+                              if (!isAssigned) {
+                                void loadCapsuleAssignmentsData(capsule.id);
+                              }
+                            }}
+                            className={`rounded-md px-3 py-1.5 text-xs font-semibold ${isAssigned ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+                          >
+                            {isAssigned ? 'Close Assignments' : 'Assign'}
+                          </button>
+                           <button
+                            type="button"
+                            onClick={async () => {
+                              setPreviewCapsule({
+                                title: capsule.title,
+                                topic: capsule.topic,
+                                description: capsule.description,
+                                media_type: capsule.media_type,
+                                media_url: capsule.media_url,
+                                content_text: capsule.content_text,
+                                reward_points: capsule.reward_points,
+                              });
+                              const qRes = await getCapsuleQuestions(capsule.id);
+                              if (!qRes.error && qRes.data) {
+                                setPreviewQuestions(qRes.data.map(q => ({
+                                  id: q.id,
+                                  question_text: q.question_text,
+                                  question_type: q.question_type,
+                                  options: q.options || ['', '', '', ''],
+                                  correct_option_index: q.correct_option_index ?? 0,
+                                  correct_answer: q.correct_answer ?? '',
+                                })));
+                              } else {
+                                setPreviewQuestions([]);
+                              }
+                              setPreviewSelectedAnswers({});
+                              setPreviewResult(null);
+                              setShowPreviewModal(true);
+                            }}
+                            className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200"
+                          >
+                            Preview
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const editCapsule = async () => {
+                                setEditingCapsuleId(capsule.id);
+                                setCapsuleTitle(capsule.title);
+                                setCapsuleTopic(capsule.topic);
+                                setCapsuleDescription(capsule.description ?? '');
+                                setCapsuleMediaType(capsule.media_type);
+                                setCapsuleMediaUrl(capsule.media_url);
+                                setCapsuleContentText(capsule.content_text);
+                                setCapsuleRewardPoints(capsule.reward_points);
+                                setCapsuleIsPublished(capsule.is_published);
+                                
+                                const qRes = await getCapsuleQuestions(capsule.id);
+                                if (!qRes.error && qRes.data) {
+                                  setQuizQuestions(qRes.data.map(q => ({
+                                    id: q.id,
+                                    question_text: q.question_text,
+                                    question_type: q.question_type,
+                                    options: q.options || ['', '', '', ''],
+                                    correct_option_index: q.correct_option_index ?? 0,
+                                    correct_answer: q.correct_answer ?? '',
+                                  })));
+                                }
+                                setActiveSection('capsules-form');
+                              };
+                              void editCapsule();
+                            }}
+                            className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handlePublishCapsule(capsule.id, !capsule.is_published)}
+                            className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-200"
+                          >
+                            {capsule.is_published ? 'Unpublish' : 'Publish'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteCapsule(capsule.id)}
+                            className="inline-flex items-center gap-2 rounded-md bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:bg-rose-400"
+                            disabled={deletingCapsuleId === capsule.id}
+                          >
+                            {deletingCapsuleId === capsule.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {isAssigned && (
+                        <div className="border-t border-gray-100 pt-3 space-y-4">
+                          <h4 className="font-semibold text-sm text-gray-900">Manage Assignments for "{capsule.title}"</h4>
+                          
+                          {loadingAssignments ? (
+                            <p className="text-xs text-gray-500">Loading assignments...</p>
+                          ) : (
+                            <div className="grid gap-4 md:grid-cols-2">
+                              {/* Class Assignments */}
+                              <div className="space-y-2 border border-gray-150 p-3 rounded-lg bg-gray-50">
+                                <span className="font-semibold text-xs text-gray-700 uppercase tracking-wider block">Class Assignments</span>
+                                
+                                <form onSubmit={handleAssignClass} className="flex gap-2">
+                                  <select
+                                    required
+                                    value={assignClassId}
+                                    onChange={(e) => setAssignClassId(e.target.value)}
+                                    className="flex-1 rounded-md border border-gray-300 text-xs p-2 bg-white"
+                                  >
+                                    <option value="">Select a class...</option>
+                                    {classes.filter(c => c.is_active).map(c => (
+                                      <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                  </select>
+                                  <button type="submit" className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-blue-700">
+                                    Assign Class
+                                  </button>
+                                </form>
+
+                                <div className="mt-2 space-y-1">
+                                  {currentClassAssignments.length === 0 ? (
+                                    <p className="text-xs text-gray-500">No classes assigned.</p>
+                                  ) : (
+                                    currentClassAssignments.map(assign => (
+                                      <div key={assign.id} className="flex justify-between items-center bg-white border border-gray-150 p-2 rounded-md">
+                                        <span className="text-xs font-semibold text-gray-700">{assign.class?.name || 'Class'}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleRemoveClass(assign.class_id)}
+                                          className="text-xs font-semibold text-red-600 hover:underline"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Student Assignments */}
+                              <div className="space-y-2 border border-gray-150 p-3 rounded-lg bg-gray-50">
+                                <span className="font-semibold text-xs text-gray-700 uppercase tracking-wider block">Student Assignments</span>
+                                
+                                <form onSubmit={handleAssignStudent} className="flex gap-2">
+                                  <select
+                                    required
+                                    value={assignStudentId}
+                                    onChange={(e) => setAssignStudentId(e.target.value)}
+                                    className="flex-1 rounded-md border border-gray-300 text-xs p-2 bg-white"
+                                  >
+                                    <option value="">Select a student...</option>
+                                    {students.map(s => (
+                                      <option key={s.id} value={s.id}>{s.username}</option>
+                                    ))}
+                                  </select>
+                                  <button type="submit" className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-blue-700">
+                                    Assign Student
+                                  </button>
+                                </form>
+
+                                <div className="mt-2 space-y-1">
+                                  {currentStudentAssignments.length === 0 ? (
+                                    <p className="text-xs text-gray-500">No students assigned directly.</p>
+                                  ) : (
+                                    currentStudentAssignments.map(assign => (
+                                      <div key={assign.id} className="flex justify-between items-center bg-white border border-gray-150 p-2 rounded-md">
+                                        <span className="text-xs font-semibold text-gray-700">{assign.student?.username || 'Student'}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleRemoveStudent(assign.student_id)}
+                                          className="text-xs font-semibold text-red-600 hover:underline"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </article>
         );
       case 'materials-form':
@@ -1169,6 +2175,74 @@ export default function AdminDashboardPage() {
             )}
           </article>
         );
+      case 'announcements-form':
+        return (
+          <article className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Send Class Announcement</h2>
+            {announcementSuccess && (
+              <div className="mb-4 rounded-lg bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">
+                Announcement sent successfully to all students in the class!
+              </div>
+            )}
+            {announcementError && (
+              <div className="mb-4 rounded-lg bg-rose-50 p-4 text-sm font-semibold text-rose-700">
+                {announcementError}
+              </div>
+            )}
+            <form onSubmit={handleAnnouncementSubmit} className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Select Class *</label>
+                <select
+                  required
+                  value={announcementClassId}
+                  onChange={(event) => setAnnouncementClassId(event.target.value)}
+                  className="w-full rounded-lg border border-gray-300 p-3 bg-white"
+                >
+                  <option value="">-- Choose a Class --</option>
+                  {classes.map((cls) => (
+                    <option key={cls.id} value={cls.id}>
+                      {cls.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Title *</label>
+                <input
+                  required
+                  value={announcementTitle}
+                  onChange={(event) => setAnnouncementTitle(event.target.value)}
+                  placeholder="e.g. Test Tomorrow or Reminder"
+                  className="w-full rounded-lg border border-gray-300 p-3"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Message *</label>
+                <textarea
+                  required
+                  value={announcementBody}
+                  onChange={(event) => setAnnouncementBody(event.target.value)}
+                  placeholder="Type your announcement details here..."
+                  rows={4}
+                  className="w-full rounded-lg border border-gray-300 p-3"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={sendingAnnouncement}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-blue-400 transition-colors"
+              >
+                {sendingAnnouncement ? (
+                  <>
+                    <InlineSpinner size={16} /> Sending...
+                  </>
+                ) : (
+                  'Send Announcement'
+                )}
+              </button>
+            </form>
+          </article>
+        );
       case 'boosts-form':
         return (
           <article className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 md:p-6">
@@ -1377,6 +2451,201 @@ export default function AdminDashboardPage() {
           {renderActiveSection()}
         </div>
       </div>
+      {showPreviewModal && previewCapsule && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 overflow-y-auto">
+          <div className="relative w-full max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden my-8 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
+              <div>
+                <h3 className="font-bold text-gray-900 text-base">Teacher Preview: Student View Simulation</h3>
+                <p className="text-xs text-gray-500">Test how the lesson and quiz look for your students.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="text-gray-400 hover:text-gray-600 font-semibold text-sm"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* Modal Scrollable Content */}
+            <div className="p-5 md:p-6 overflow-y-auto space-y-6 flex-1 text-left">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-blue-50 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                    {previewCapsule.topic}
+                  </span>
+                  <span className="bg-amber-50 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full uppercase">
+                    {previewCapsule.media_type} Lesson
+                  </span>
+                </div>
+                <h2 className="text-xl font-extrabold text-gray-900 md:text-2xl mt-2">{previewCapsule.title}</h2>
+                {previewCapsule.description && (
+                  <p className="text-sm text-gray-600 mt-1">{previewCapsule.description}</p>
+                )}
+              </div>
+
+              {/* Media Section */}
+              <div className="overflow-hidden rounded-xl bg-slate-900 max-h-[300px]">
+                {previewCapsule.media_type === 'image' && previewCapsule.media_url && (
+                  <img
+                    src={previewCapsule.media_url}
+                    alt="Preview media"
+                    className="mx-auto max-h-[300px] w-full object-contain"
+                  />
+                )}
+                {previewCapsule.media_type === 'video' && previewCapsule.media_url && (
+                  <div className="aspect-video w-full max-h-[300px]">
+                    <iframe
+                      src={getEmbedUrl(previewCapsule.media_url)}
+                      title="Preview video"
+                      className="h-full w-full border-none"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                )}
+                {previewCapsule.media_type === 'audio' && previewCapsule.media_url && (
+                  <div className="p-6 bg-slate-800 flex justify-center items-center">
+                    <audio controls className="w-full max-w-md">
+                      <source src={previewCapsule.media_url} />
+                      Your browser does not support the audio element.
+                    </audio>
+                  </div>
+                )}
+                {previewCapsule.media_type === 'document' && previewCapsule.media_url && (
+                  <div className="p-6 bg-slate-800 text-center space-y-2">
+                    <p className="text-white font-semibold text-sm">Attached PDF Lesson Material</p>
+                    <a
+                      href={previewCapsule.media_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex rounded-lg bg-cyan-600 px-4 py-2 text-xs font-semibold text-white hover:bg-cyan-700"
+                    >
+                      Open Document in New Tab
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* Lesson Text */}
+              <div className="border-t border-gray-100 pt-4">
+                <h3 className="font-extrabold text-sm uppercase tracking-wider text-slate-500 mb-2">Lesson</h3>
+                <div className="text-gray-800 text-sm md:text-base leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: previewCapsule.content_text }} />
+              </div>
+
+              {/* Quiz section */}
+              <div className="border-t border-gray-150 pt-5 space-y-4">
+                <h3 className="text-lg font-bold text-gray-900">Quiz (Simulator)</h3>
+                
+                {previewQuestions.length === 0 ? (
+                  <p className="text-sm text-gray-500 italic">No quiz questions added yet.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {previewQuestions.map((q, idx) => {
+                      const answer = previewSelectedAnswers[idx];
+                      return (
+                        <div key={idx} className="p-4 rounded-xl border border-gray-200 bg-gray-50 space-y-3">
+                          <p className="font-semibold text-sm text-gray-800">
+                            Q{idx + 1}. {q.question_text || 'Untitled Question'}
+                          </p>
+
+                          {q.question_type === 'fill_blank' ? (
+                            <input
+                              type="text"
+                              value={answer?.textAnswer || ''}
+                              onChange={(e) => {
+                                setPreviewSelectedAnswers({
+                                  ...previewSelectedAnswers,
+                                  [idx]: { textAnswer: e.target.value }
+                                });
+                              }}
+                              placeholder="Type your answer here..."
+                              className="w-full rounded-lg border border-gray-300 p-2.5 text-sm bg-white"
+                            />
+                          ) : (
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {(q.options || []).map((option, optIdx) => {
+                                const isSelected = answer?.optionIndex === optIdx;
+                                return (
+                                  <button
+                                    key={optIdx}
+                                    type="button"
+                                    onClick={() => {
+                                      setPreviewSelectedAnswers({
+                                        ...previewSelectedAnswers,
+                                        [idx]: { optionIndex: optIdx }
+                                      });
+                                    }}
+                                    className={`text-left p-3 rounded-lg border text-xs font-semibold transition ${
+                                      isSelected
+                                        ? 'bg-blue-600 text-white border-blue-600'
+                                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-100'
+                                    }`}
+                                  >
+                                    {option || `Option ${optIdx + 1}`}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {previewResult ? (
+                      <div className={`p-4 rounded-xl flex items-start gap-3 ${previewResult.passed ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-rose-50 border border-rose-200 text-rose-800'}`}>
+                        <div className="space-y-1">
+                          <p className="font-bold text-sm">
+                            {previewResult.passed ? 'Passed! Score is 80%+' : 'Failed! Score is under 80%'}
+                          </p>
+                          <p className="text-xs">
+                            Correct: {previewResult.score} / {previewResult.total}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreviewSelectedAnswers({});
+                              setPreviewResult(null);
+                            }}
+                            className="mt-2 text-xs font-bold underline cursor-pointer"
+                          >
+                            Reset Simulator
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          let correct = 0;
+                          previewQuestions.forEach((q, idx) => {
+                            const answer = previewSelectedAnswers[idx];
+                            if (q.question_type === 'fill_blank') {
+                              const sAns = (answer?.textAnswer || '').toLowerCase().trim();
+                              const cAns = (q.correct_answer || '').toLowerCase().trim();
+                              if (sAns && sAns === cAns) correct++;
+                            } else {
+                              if (answer?.optionIndex === q.correct_option_index) correct++;
+                            }
+                          });
+                          const total = previewQuestions.length;
+                          const passed = total > 0 ? (correct / total) >= 0.8 : false;
+                          setPreviewResult({ score: correct, total, passed });
+                        }}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition cursor-pointer"
+                      >
+                        Submit Answers (Simulation)
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

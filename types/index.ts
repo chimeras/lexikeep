@@ -286,3 +286,83 @@ export interface LibraryResource {
   created_by: string | null;
   created_at: string;
 }
+
+export type CapsuleMediaType = 'image' | 'video' | 'document' | 'audio';
+export type CapsuleQuestionType = 'mcq' | 'fill_blank' | 'true_false';
+
+export interface EducationCapsule {
+  id: string;
+  title: string;
+  topic: string;
+  description: string | null;
+  media_type: CapsuleMediaType;
+  media_url: string;
+  content_text: string;
+  reward_points: number;
+  is_published: boolean;
+  created_by: string;
+  created_at: string;
+}
+
+export interface CapsuleQuizQuestion {
+  id: string;
+  capsule_id: string;
+  question_text: string;
+  question_type: CapsuleQuestionType;
+  options: string[] | null;
+  correct_option_index: number | null;
+  correct_answer: string | null;
+  order_index: number;
+}
+
+export interface CapsuleClassAssignment {
+  id: string;
+  capsule_id: string;
+  class_id: string;
+  assigned_at: string;
+}
+
+export interface CapsuleStudentAssignment {
+  id: string;
+  capsule_id: string;
+  student_id: string;
+  assigned_at: string;
+}
+
+export interface CapsuleCompletion {
+  id: string;
+  capsule_id: string;
+  student_id: string;
+  score: number;
+  total_questions: number;
+  passed: boolean;
+  points_awarded: number;
+  completed_at: string;
+}
+
+export type NotificationType = 'announcement' | 'moderation' | 'badge' | 'capsule' | 'message' | 'system';
+
+export interface Notification {
+  id: string;
+  recipient_id: string;
+  sender_id: string | null;
+  type: NotificationType;
+  title: string;
+  body: string;
+  link: string | null;
+  is_read: boolean;
+  created_at: string;
+  sender?: Pick<Profile, 'id' | 'username' | 'avatar_url' | 'role'> | null;
+}
+
+export interface Message {
+  id: string;
+  sender_id: string;
+  recipient_id: string;
+  body: string;
+  is_read: boolean;
+  created_at: string;
+  sender?: Pick<Profile, 'id' | 'username' | 'avatar_url' | 'role'> | null;
+  recipient?: Pick<Profile, 'id' | 'username' | 'avatar_url' | 'role'> | null;
+}
+

@@ -2,6 +2,7 @@ import { getStudentBadges } from '@/lib/badges-data';
 import { incrementStudentPoints, getStudentMetrics, type StudentMetrics } from '@/lib/student-data';
 import { supabase } from '@/lib/supabase';
 import type { ChallengeMetric, StudentBadge } from '@/types';
+import { createNotification } from './notifications-data';
 
 interface BadgeDefinitionRow {
   id: string;
@@ -190,6 +191,19 @@ export const syncStudentBadges = async (
 
   if (newBadgeRewardPoints > 0) {
     await incrementStudentPoints(studentId, newBadgeRewardPoints);
+    for (const b of unlockedBadges) {
+      const { error: notifError } = await createNotification({
+        recipientId: studentId,
+        senderId: null,
+        type: 'badge',
+        title: 'New Badge Unlocked!',
+        body: `Congratulations! You unlocked the "${b.name}" badge.`,
+        link: '/profile',
+      });
+      if (notifError) {
+        console.error('Failed to create badge notification:', notifError);
+      }
+    }
   }
 
   const badgeRowsById = new Map<string, StudentBadgeRow>();

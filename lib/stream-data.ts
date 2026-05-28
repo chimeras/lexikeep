@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import type { StreamMutedUser, StreamPost } from '@/types';
+import { createNotification } from './notifications-data';
 
 const STREAM_PAGE_SIZE = 10;
 
@@ -84,6 +85,48 @@ export const getStreamPosts = async ({ offset = 0, limit = STREAM_PAGE_SIZE }: {
   return { data: (data as StreamPostRow[]).map(mapStreamPost), error: null };
 };
 
+const handleMentions = async (text: string, senderId: string, type: 'post' | 'comment', link: string) => {
+  const mentionRegex = /\B@([a-zA-Z0-9_-]+)/g;
+  const matches = text.match(mentionRegex);
+  if (!matches) return;
+
+  const usernames = Array.from(new Set(matches.map((m) => m.slice(1).toLowerCase())));
+  if (usernames.length === 0) return;
+
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, username');
+
+  if (!profiles) return;
+
+  const matchedProfiles = profiles.filter((p) =>
+    p.username && usernames.includes(p.username.toLowerCase())
+  );
+
+  if (matchedProfiles.length === 0) return;
+
+  const { data: sender } = await supabase
+    .from('profiles')
+    .select('username')
+    .eq('id', senderId)
+    .single();
+
+  const senderUsername = sender?.username || 'Someone';
+
+  for (const profile of matchedProfiles) {
+    if (profile.id === senderId) continue;
+
+    await createNotification({
+      recipientId: profile.id,
+      senderId,
+      type: 'system',
+      title: 'You were mentioned',
+      body: `${senderUsername} mentioned you in a ${type}: "${text.slice(0, 50)}${text.length > 50 ? '...' : ''}"`,
+      link,
+    }).catch(() => null);
+  }
+};
+
 export const createStreamPost = async ({ authorId, body }: { authorId: string; body: string }) => {
   const trimmed = body.trim();
   if (!trimmed) {
@@ -93,6 +136,11 @@ export const createStreamPost = async ({ authorId, body }: { authorId: string; b
     author_id: authorId,
     body: trimmed.slice(0, 280),
   });
+
+  if (!error) {
+    void handleMentions(trimmed, authorId, 'post', '/stream');
+  }
+
   return { error };
 };
 
@@ -136,6 +184,35 @@ export const toggleStreamLike = async ({
     post_id: postId,
     user_id: userId,
   });
+
+  if (!error) {
+    // Notify post author about the like
+    const { data: post } = await supabase
+      .from('stream_posts')
+      .select('author_id, body')
+      .eq('id', postId)
+      .single();
+
+    if (post && post.author_id !== userId) {
+      const { data: liker } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', userId)
+        .single();
+      
+      const likerUsername = liker?.username || 'Someone';
+
+      await createNotification({
+        recipientId: post.author_id,
+        senderId: userId,
+        type: 'system',
+        title: 'New Like on your Post',
+        body: `${likerUsername} liked your post: "${post.body.slice(0, 50)}${post.body.length > 50 ? '...' : ''}"`,
+        link: '/stream',
+      }).catch(() => null);
+    }
+  }
+
   return { error };
 };
 
@@ -157,6 +234,38 @@ export const createStreamComment = async ({
     user_id: userId,
     comment: trimmed.slice(0, 280),
   });
+
+  if (!error) {
+    // Notify mentions
+    void handleMentions(trimmed, userId, 'comment', '/stream');
+
+    // Notify post author
+    const { data: post } = await supabase
+      .from('stream_posts')
+      .select('author_id, body')
+      .eq('id', postId)
+      .single();
+
+    if (post && post.author_id !== userId) {
+      const { data: commenter } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', userId)
+        .single();
+
+      const commenterUsername = commenter?.username || 'Someone';
+
+      await createNotification({
+        recipientId: post.author_id,
+        senderId: userId,
+        type: 'system',
+        title: 'New Comment on your Post',
+        body: `${commenterUsername} commented on your post: "${trimmed.slice(0, 50)}${trimmed.length > 50 ? '...' : ''}"`,
+        link: '/stream',
+      }).catch(() => null);
+    }
+  }
+
   return { error };
 };
 

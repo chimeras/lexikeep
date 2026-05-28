@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, Brain, CircleCheckBig, Flame, Plus, Sparkles, Target, Trophy } from 'lucide-react';
+import { BookOpen, Brain, CircleCheckBig, Flame, Plus, Sparkles, Target, Trophy, GraduationCap } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -15,18 +15,19 @@ import { getLevelInfo } from '@/lib/levels';
 import { getDueReviewCount, getReviewsCompletedTodayCount } from '@/lib/review-data';
 import { getStudentMetrics, type StudentMetrics } from '@/lib/student-data';
 import type { DailyChallenge, StudentBadge, TeacherBoost } from '@/types';
-
+ 
 const ProgressChart = dynamic(() => import('@/components/dashboard/ProgressChart'), {
   ssr: false,
 });
-
+ 
 const emptyMetrics: StudentMetrics = {
   points: 0,
   streak: 0,
   wordsCollected: 0,
   expressionsCollected: 0,
+  capsulesCompleted: 0,
 };
-
+ 
 export default function DashboardPage() {
   const { profile, user, loading: authLoading } = useAuth();
   const studentId = profile?.id ?? user?.id ?? null;
@@ -62,7 +63,7 @@ export default function DashboardPage() {
         minute: '2-digit',
       })
     : null;
-
+ 
   if (reviewsDue > 0) {
     fastTips.push(`Complete ${reviewsDue} review${reviewsDue === 1 ? '' : 's'} due now for quick points.`);
   }
@@ -76,7 +77,7 @@ export default function DashboardPage() {
   if (level.pointsToNext !== null) {
     fastTips.push(`${level.pointsToNext} points to reach Level ${level.level + 1}.`);
   }
-
+ 
   useEffect(() => {
     if (authLoading) {
       return;
@@ -86,7 +87,7 @@ export default function DashboardPage() {
       setDashboardError('Session not ready. Please reload the page.');
       return;
     }
-
+ 
     const loadDashboardData = async () => {
       setDashboardLoading(true);
       setDashboardError(null);
@@ -131,14 +132,14 @@ export default function DashboardPage() {
     };
     void loadDashboardData();
   }, [studentId, reloadKey, authLoading]);
-
+ 
   if (dashboardLoading) {
     return (
       <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-32 pt-5 md:px-6 md:pb-8 md:pt-8">
         <div className="relative overflow-hidden rounded-3xl border border-blue-100 bg-white p-5 shadow-sm">
           <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-blue-100/60 blur-2xl" />
           <div className="absolute -bottom-20 -left-16 h-44 w-44 rounded-full bg-cyan-100/70 blur-2xl" />
-
+ 
           <div className="relative flex flex-col items-center gap-4 text-center sm:flex-row sm:items-center sm:justify-start sm:text-left">
             <svg
               viewBox="0 0 120 120"
@@ -170,9 +171,9 @@ export default function DashboardPage() {
                 <circle cx="76" cy="66" r="5" fill="#38bdf8" />
               </g>
             </svg>
-
+ 
             <div>
-              <p className="text-base font-semibold text-slate-900">Preparing your dashboard</p>
+              <p className="text-sm font-semibold text-slate-900">Preparing your dashboard</p>
               <p className="mt-1 text-sm text-slate-600">
                 Loading progress, quests, and leaderboard data...
               </p>
@@ -185,7 +186,7 @@ export default function DashboardPage() {
       </section>
     );
   }
-
+ 
   if (dashboardError) {
     return (
       <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-32 pt-5 md:px-6 md:pb-8 md:pt-8">
@@ -202,7 +203,7 @@ export default function DashboardPage() {
       </section>
     );
   }
-
+ 
   return (
     <section className="student-shell mx-auto grid max-w-6xl gap-5 px-4 pb-32 pt-5 md:gap-6 md:px-6 md:pb-8 md:pt-8">
       <div className="float-in relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-400 p-5 text-white shadow-lg shadow-blue-200">
@@ -258,7 +259,7 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
-
+ 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatsCard title="Words Collected" value={metrics.wordsCollected} icon={<BookOpen className="text-white" />} />
         <StatsCard title="Expressions" value={metrics.expressionsCollected} icon={<Sparkles className="text-white" />} />
@@ -266,6 +267,7 @@ export default function DashboardPage() {
         <StatsCard title="Leaderboard Points" value={metrics.points} icon={<Trophy className="text-white" />} />
         <StatsCard title="Reviews Due" value={reviewsDue} icon={<Brain className="text-white" />} />
         <StatsCard title="Reviewed Today" value={reviewsCompletedToday} icon={<CircleCheckBig className="text-white" />} />
+        <StatsCard title="Capsules Passed" value={metrics.capsulesCompleted} icon={<GraduationCap className="text-white" />} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, Brain, Home, Layers, Library, MoreHorizontal, Trophy, UserRound } from 'lucide-react';
+import { BookOpen, Brain, Home, Layers, Library, MoreHorizontal, Trophy, UserRound, GraduationCap, MessageSquare } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -8,15 +8,18 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { getDashboardRoute } from '@/lib/auth';
 import { useAuth } from '@/components/providers/AuthProvider';
+import { NotificationBell } from './NotificationBell';
 
 const studentNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Home },
   { href: '/stream', label: 'Stream', icon: UserRound },
   { href: '/materials', label: 'Materials', icon: Layers },
   { href: '/library', label: 'Library', icon: Library },
+  { href: '/capsules', label: 'Capsules', icon: GraduationCap },
   { href: '/vocabulary', label: 'Vocabulary', icon: BookOpen },
   { href: '/review', label: 'Review', icon: Brain },
   { href: '/competition', label: 'Competition', icon: Trophy },
+  { href: '/inbox', label: 'Inbox', icon: MessageSquare },
   { href: '/profile', label: 'Profile', icon: UserRound },
 ];
 const mobileNavItems = [
@@ -117,6 +120,14 @@ export function Navbar() {
                 >
                   Moderation
                 </Link>
+                <Link
+                  href="/admin/messages"
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive('/admin/messages') ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  Messages
+                </Link>
               </div>
             ) : (
               studentNavItems.map((item) => {
@@ -139,6 +150,7 @@ export function Navbar() {
           </nav>
 
           <div className="hidden items-center gap-2 text-sm md:flex">
+            {!loading && isAuthenticated && <NotificationBell />}
             {profile?.avatar_url && (
               <Link href="/profile" className="inline-flex">
                 <Image
@@ -193,8 +205,18 @@ export function Navbar() {
               </Link>
             )}
             {!isAdminArea && (
+              <Link href="/capsules" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Capsules
+              </Link>
+            )}
+            {!isAdminArea && (
               <Link href="/stream" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Stream
+              </Link>
+            )}
+            {!isAdminArea && (
+              <Link href="/inbox" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Inbox
               </Link>
             )}
             <Link href="/profile" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
@@ -218,6 +240,11 @@ export function Navbar() {
             {canAccessTeacher && (
               <Link href="/admin/moderation" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 Moderation
+              </Link>
+            )}
+            {canAccessTeacher && (
+              <Link href="/admin/messages" className="mt-1 block rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Messages
               </Link>
             )}
             <button

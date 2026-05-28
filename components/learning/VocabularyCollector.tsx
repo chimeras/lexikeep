@@ -14,6 +14,7 @@ import InlineSpinner from '@/components/ui/InlineSpinner';
 
 type SourceType = 'material' | 'web' | 'manual';
 type EntryType = 'word' | 'expression';
+type VocabularyDifficulty = 'easy' | 'medium' | 'hard';
 
 interface MicroFeedback {
   tip: string;
@@ -182,6 +183,7 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
   const [entryType, setEntryType] = useState<EntryType>('word');
   const [term, setTerm] = useState('');
   const [category, setCategory] = useState('Business');
+  const [difficulty, setDifficulty] = useState<VocabularyDifficulty>('medium');
   const [definition, setDefinition] = useState('');
   const [definitionFr, setDefinitionFr] = useState('');
   const [exampleSentence, setExampleSentence] = useState('');
@@ -377,6 +379,7 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
             category,
             imageUrl,
             aiAssisted,
+            difficulty,
           }),
           SAVE_TIMEOUT_MS,
           'Save request timed out. Please try again.',
@@ -445,6 +448,7 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
       setDefinitionFr('');
       setExampleSentence('');
       setImageUrl('');
+      setDifficulty('medium');
       setAiAssisted(false);
       await applyBadgeSync(studentId);
       await refreshProfile();
@@ -580,6 +584,20 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
               <option>Idiom</option>
             </select>
           </div>
+          {entryType === 'word' && (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">Difficulty</label>
+              <select
+                className="w-full rounded-lg border border-gray-300 p-3"
+                value={difficulty}
+                onChange={(event) => setDifficulty(event.target.value as VocabularyDifficulty)}
+              >
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </div>
+          )}
         </div>
 
         <div>
@@ -603,6 +621,8 @@ export default function VocabularyCollector({ onSaved }: VocabularyCollectorProp
           </label>
         </div>
 
+        {errorMessage && <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700">{errorMessage}</p>}
+        
         <div>
           <label className="mb-2 block text-sm font-medium text-gray-700">Definition *</label>
           <textarea

@@ -58,6 +58,24 @@ export default function TeacherMessagesPage() {
 
     void initData();
 
+    // Polling fallback to keep message lists updated if WebSocket fails
+    const pollInterval = setInterval(async () => {
+      const convsRes = await getConversations(userId);
+      setConversations(convsRes.data || []);
+
+      if (selectedPartner) {
+        const msgsRes = await getMessages(userId, selectedPartner.id);
+        setMessages((prev) => {
+          const prevIds = prev.map((m) => m.id).join(',');
+          const newIds = (msgsRes.data || []).map((m) => m.id).join(',');
+          if (prevIds !== newIds) {
+            return msgsRes.data || [];
+          }
+          return prev;
+        });
+      }
+    }, 6000);
+
     // Subscribe to messages table
     const channel = supabase
       .channel(`teacher-messages:${userId}`)
@@ -104,10 +122,17 @@ export default function TeacherMessagesPage() {
           }
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err || status === 'CHANNEL_ERROR') {
+          console.error(`Teacher messages realtime channel error for user ${userId}:`, err || status);
+        } else {
+          console.log(`Teacher messages realtime status for user ${userId}:`, status);
+        }
+      });
 
     return () => {
       void supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, [userId, selectedPartner]);
 

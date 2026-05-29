@@ -28,6 +28,11 @@ export function NotificationBell() {
     };
 
     void loadData();
+    
+    // Polling fallback to ensure updates if realtime subscription is blocked/failed
+    const pollInterval = setInterval(() => {
+      void loadData();
+    }, 8000);
 
     // Subscribe to realtime notifications
     const channel = supabase
@@ -41,10 +46,8 @@ export function NotificationBell() {
           filter: `recipient_id=eq.${user.id}`,
         },
         async (payload) => {
-          // Play a subtle sound or trigger animation
           const newNotif = payload.new as Notification;
           
-          // Fetch sender info for new notification
           const { data: senderProfile } = await supabase
             .from('profiles')
             .select('id, username, avatar_url, role')
@@ -73,14 +76,20 @@ export function NotificationBell() {
           setNotifications((prev) =>
             prev.map((n) => (n.id === updated.id ? { ...n, is_read: updated.is_read } : n))
           );
-          // Recalculate unread count
           void getUnreadCount(user.id).then(({ count }) => setUnreadCount(count ?? 0));
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err || status === 'CHANNEL_ERROR') {
+          console.error(`Notification realtime channel error for user ${user.id}:`, err || status);
+        } else {
+          console.log(`Notification realtime status for user ${user.id}:`, status);
+        }
+      });
 
     return () => {
       void supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, [user]);
 

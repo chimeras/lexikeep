@@ -59,6 +59,24 @@ export default function StudentInboxPage() {
 
     void initData();
 
+    // Polling fallback to keep message lists updated if WebSocket fails
+    const pollInterval = setInterval(async () => {
+      const convsRes = await getConversations(userId);
+      setConversations(convsRes.data || []);
+
+      if (selectedPartner) {
+        const msgsRes = await getMessages(userId, selectedPartner.id);
+        setMessages((prev) => {
+          const prevIds = prev.map((m) => m.id).join(',');
+          const newIds = (msgsRes.data || []).map((m) => m.id).join(',');
+          if (prevIds !== newIds) {
+            return msgsRes.data || [];
+          }
+          return prev;
+        });
+      }
+    }, 6000);
+
     // Subscribe to messages table
     const channel = supabase
       .channel(`user-messages:${userId}`)
@@ -71,19 +89,15 @@ export default function StudentInboxPage() {
         },
         async (payload) => {
           const newMsg = payload.new as Message;
-          // Check if this message is part of our conversations
           if (newMsg.sender_id === userId || newMsg.recipient_id === userId) {
-            // Reload conversations to update previews and unread counts
             const { data } = await getConversations(userId);
             setConversations(data || []);
 
-            // If it belongs to currently selected conversation, append it
             if (
               selectedPartner &&
               ((newMsg.sender_id === userId && newMsg.recipient_id === selectedPartner.id) ||
                 (newMsg.sender_id === selectedPartner.id && newMsg.recipient_id === userId))
             ) {
-              // Fetch sender details
               const { data: senderProfile } = await supabase
                 .from('profiles')
                 .select('id, username, avatar_url, role')
@@ -97,10 +111,8 @@ export default function StudentInboxPage() {
 
               setMessages((prev) => [...prev, enrichedMsg]);
 
-              // If we are the recipient, mark it as read immediately
               if (newMsg.recipient_id === userId) {
                 await markMessagesRead(userId, selectedPartner.id);
-                // Also reset unreadCount locally
                 setConversations((prev) =>
                   prev.map((c) =>
                     c.partner.id === selectedPartner.id ? { ...c, unreadCount: 0 } : c
@@ -111,10 +123,17 @@ export default function StudentInboxPage() {
           }
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (err || status === 'CHANNEL_ERROR') {
+          console.error(`Inbox realtime channel error for user ${userId}:`, err || status);
+        } else {
+          console.log(`Inbox realtime status for user ${userId}:`, status);
+        }
+      });
 
     return () => {
       void supabase.removeChannel(channel);
+      clearInterval(pollInterval);
     };
   }, [userId, selectedPartner]);
 

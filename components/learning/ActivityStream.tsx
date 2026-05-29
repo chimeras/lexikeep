@@ -262,7 +262,7 @@ export default function ActivityStream({ compact = false }: ActivityStreamProps)
                   </div>
                   <p className="shrink-0 text-[11px] font-medium text-slate-500">{formatRelativeTime(post.created_at)}</p>
                 </div>
-                <p className={`mt-1.5 text-slate-800 ${compact ? 'text-[13px] leading-5' : 'text-sm'}`}>
+                <p className={`mt-1.5 text-slate-800 break-words ${compact ? 'text-[13px] leading-5' : 'text-sm'}`}>
                   {message}
                   {linkedTerm && (
                     <>

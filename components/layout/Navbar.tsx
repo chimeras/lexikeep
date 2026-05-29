@@ -75,14 +75,17 @@ export function Navbar() {
           </Link>
 
           {!loading && isAuthenticated && (
-            <button
-              type="button"
-              onClick={() => setMoreOpen((previous) => !previous)}
-              className="rounded-md border border-gray-300 p-1.5 text-gray-700 hover:bg-gray-100 md:hidden"
-              aria-label="Open more menu"
-            >
-              <MoreHorizontal size={18} />
-            </button>
+            <div className="flex items-center gap-1 md:hidden">
+              <NotificationBell />
+              <button
+                type="button"
+                onClick={() => setMoreOpen((previous) => !previous)}
+                className="rounded-md border border-gray-300 p-1.5 text-gray-700 hover:bg-gray-100"
+                aria-label="Open more menu"
+              >
+                <MoreHorizontal size={18} />
+              </button>
+            </div>
           )}
 
           <nav className="hidden items-center gap-1 md:flex">

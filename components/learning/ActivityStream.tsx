@@ -162,8 +162,8 @@ export default function ActivityStream({ compact = false }: ActivityStreamProps)
   };
 
   return (
-    <article className={`card-pop rounded-3xl border border-slate-200 bg-gradient-to-b from-white to-slate-50 shadow-sm ${compact ? 'p-3 md:p-4' : 'p-4'}`}>
-      <div className="mb-3 flex items-center justify-between gap-2">
+    <article className={`card-pop w-full max-w-full overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-b from-white to-slate-50 shadow-sm ${compact ? 'p-3 md:p-4' : 'p-4'}`}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <h2 className={`${compact ? 'text-base md:text-lg' : 'text-lg'} font-bold text-slate-900`}>{streamTitle}</h2>
         <button
           type="button"
